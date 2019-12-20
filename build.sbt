@@ -36,6 +36,7 @@ scalacOptions ++= Seq(
   "-encoding", "UTF-8",
   "-language:higherKinds",
   "-language:postfixOps",
+  "-language:higherKinds",
   "-feature",
   "-Ypartial-unification",
   "-Xfatal-warnings",

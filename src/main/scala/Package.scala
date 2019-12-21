@@ -4,16 +4,18 @@ import cats.effect._
 import cats.effect.concurrent.MVar
 import cats.implicits._
 import com.gilt.gfc.semver.SemVer
+import VersionCondition._
 
 class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String, PackageInfo]], depPackages: MVar[F, Map[String, Seq[PackageInfo]]])(
-  implicit F: ConcurrentEffect[F]
+  implicit F: Concurrent[F]
 ) {
   def dependencies: F[Seq[PackageInfo]] = for {
     mago <- depPackages.read.map(_.values.flatten[PackageInfo].toList)
     children <- dep.read.map(_.values.toList)
   } yield mago ++ children
 
-  def addNewVersion(newPack: PackageInfo, deps: Seq[PackageInfo]): F[Boolean] =
+  def addNewVersion(newPack: PackageInfo, deps: Seq[PackageInfo]): F[Boolean] = {
+    println(s"add New Version: ${newPack.name}@${newPack.version.original} -> ${info.name}@${info.version.original}")
     if (info.dep.get(newPack.name).exists(_.valid(newPack.version)) && info.version < newPack.version) {
       for {
         m <- dep.take.map(_.updated(newPack.name, newPack))
@@ -24,6 +26,7 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
     } else {
       F.pure(false)
     }
+  }
 
   def updateDependencies(updatedPack: PackageInfo, deps: Seq[PackageInfo]): F[Boolean] =
     dep.read.map(_.get(updatedPack.name)).flatMap {

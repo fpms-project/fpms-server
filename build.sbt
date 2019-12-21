@@ -26,7 +26,8 @@ lazy val root = (project in file(".")).settings(
     "co.fs2" %% "fs2-core" % "2.1.0",
     "co.fs2" %% "fs2-io" % "2.1.0",
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
-    "co.fs2" %% "fs2-experimental" % "2.1.0"
+    "co.fs2" %% "fs2-experimental" % "2.1.0",
+    "dev.profunktor" %% "console4cats" % "0.8.0"
   ),
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0")

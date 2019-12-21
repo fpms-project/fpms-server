@@ -1,9 +1,9 @@
 package package_manager_server
 
-import com.gilt.gfc.semver.SemVer
-
 sealed trait PackageUpdateEvent
 
-case class AddNewVersion(name: String,version: SemVer,dependency: Seq[PackageBase]) extends PackageUpdateEvent
+case class AddNewVersion(packageInfo: PackageInfo, dependencies: Seq[PackageInfo]) extends PackageUpdateEvent
 
-case class UpdateDependency(name: String,version: SemVer, dependencies: Seq[PackageBase]) extends PackageUpdateEvent
+case class UpdateDependency(packageInfo: PackageInfo, dependencies: Seq[PackageInfo]) extends PackageUpdateEvent
+
+case class AddNewNamePackage(name: String) extends PackageUpdateEvent

@@ -1,15 +1,12 @@
 package package_manager_server
 
-import fs2.Stream
+import cats.effect.ConcurrentEffect
+import cats.implicits._
 
-class PackageManager(packageRepository: PackageRepository,refPackageRepository: RefPackageRepository) {
-  def addVersion(pack: CodePackage) = Stream(pack).evalMap { pack =>
+class PackageManager[F[_] : ConcurrentEffect](packageRepository: PackageRepository[F], refPackageRepository: RefPackageRepository) {
+  def addVersion(pack: PackageInfo):F[Unit] =
     for {
       _ <- packageRepository.store(pack)
-      _ <- pack.dependencies.map { dep =>
-        refPackageRepository.add(pack.info.name,RefPackage())
-      }
-    } yield pack
-
+    } yield ()
   }
 }

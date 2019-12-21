@@ -1,7 +1,7 @@
 package package_manager_server
 
-trait PackageRepository {
-  def get(name: String): Seq[CodePackage]
+trait PackageRepository[F[_]] {
+  def get(name: String): F[Seq[PackageInfo]]
 
-  def store(pack: CodePackage): Option[Unit]
+  def store(pack: PackageInfo): F[Unit]
 }

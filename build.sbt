@@ -20,14 +20,16 @@ lazy val root = (project in file(".")).settings(
     "org.specs2" %% "specs2-core" % Specs2Version % "test",
     "ch.qos.logback" % "logback-classic" % LogbackVersion,
     "org.typelevel" %% "cats-effect" % "2.0.0",
+    "org.typelevel" %% "cats-core" % "2.0.0",
+    "org.typelevel" %% "cats-mtl-core" % "0.7.0",
     "com.gilt" %% "gfc-semver" % "0.0.5",
     "co.fs2" %% "fs2-core" % "2.1.0",
     "co.fs2" %% "fs2-io" % "2.1.0",
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
     "co.fs2" %% "fs2-experimental" % "2.1.0"
   ),
-  addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
-  addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.0")
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0")
 )
 
 

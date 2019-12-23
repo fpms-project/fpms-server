@@ -27,10 +27,12 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         subs <- createNewSubscriber(pack)
         d <- EitherT.right[Any](map.take.map(_.updated(pack.name, subs)))
         _ <- EitherT.right[Any](map.put(d))
-      } yield subs)(e => EitherT.right(f.pure(e)))
+      } yield {
+        f.toIO(subs.start).unsafeRunAsyncAndForget()
+        subs
+      })(e => EitherT.right(f.pure(e)))
     _ <- EitherT.rightT[F, Unit](pack.dep.keys.toSeq.foreach(d => f.toIO(topicManager.subscribeTopic(d, subscriber.queue)).unsafeRunAsyncAndForget()))
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
-    _ <- EitherT.rightT(f.toIO(subscriber.start).unsafeRunAsyncAndForget())
   } yield ()
 
   def getDependencies(name: String, version: SemVer): EitherT[F, PUSMError, Seq[PackageInfo]] =

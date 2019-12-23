@@ -35,31 +35,42 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
   } yield ()
 
-  def getDependencies(name: String, version: SemVer): F[Option[Seq[PackageInfo]]] =
-    map.read.map(_.get(name)).flatMap(_.map(_.getDependencies(version)).getOrElse(f.raiseError(new Throwable(s"${name}@${version} package not found"))))
+  def getDependencies(name: String, version: SemVer): EitherT[F, PUSMError, Seq[PackageInfo]] =
+    EitherT(
+      map.read
+        .map(_.get(name))
+        .flatMap(c =>
+          c.map[F[Either[PUSMError, Seq[PackageInfo]]]](
+            _.getDependencies(version).map(_.toRight(CantGetLatestOfDeps))
+          ).getOrElse[F[Either[PUSMError, Seq[PackageInfo]]]](f.pure(Left(CantGetLatestOfDeps))))
+    )
 
-  def calcuratePackageDependeincies(latests: Map[String, PackageDepsContainer[F]]): EitherT[F, Nothing, Map[String, Seq[PackageInfo]]] = EitherT.right(
-    latests.map(e => f.pure(e._1) product e._2.dependencies)
-      .toList
-      .toNel
-      .map(_.parSequence.map(_.toList.toMap))
-      .getOrElse(f.pure(Map.empty[String, Seq[PackageInfo]]))
-  )
+
+  def calcuratePackageDependeincies(latests: Map[String, PackageDepsContainer[F]]): EitherT[F, Nothing, Map[String, Seq[PackageInfo]]] =
+    EitherT.right(
+      latests.map(e => f.pure(e._1) product e._2.dependencies)
+        .toList
+        .toNel
+        .map(_.parSequence.map(_.toList.toMap))
+        .getOrElse(f.pure(Map.empty[String, Seq[PackageInfo]]))
+    )
 
   def getLatestsOfDeps(deps: Map[String, VersionCondition]): EitherT[F, PUSMError, Map[String, PackageDepsContainer[F]]] =
     EitherT(
       deps.map(
         e => for {
-          v <- map.read.map(_.get(e._1))
+          v <- map.read
+            .map(_.get(e._1))
           d <- f.pure(v).flatMap[Option[PackageDepsContainer[F]]](_.map(_.getLatestVersion(e._2)).getOrElse(f.pure(None)))
         } yield d
-      ).toList.toNel.fold(f.delay[Either[PUSMError, Map[String, PackageDepsContainer[F]]]](Right(Map.empty[String, PackageDepsContainer[F]])))(_.parSequence.map(e => {
-        if (e.forall(_.isDefined)) {
-          Right(e.toList.flatMap(_.map(v => (v.info.name, v))).toMap)
-        } else {
-          Left(CantGetLatestOfDeps)
-        }
-      }))
+      ).toList.toNel.fold(f.delay[Either[PUSMError, Map[String, PackageDepsContainer[F]]]](Right(Map.empty[String, PackageDepsContainer[F]])))(list =>
+        list.parSequence.map(e => {
+          if (e.forall(_.isDefined)) {
+            Right(e.toList.flatMap(_.map(v => (v.info.name, v))).toMap)
+          } else {
+            Left(CantGetLatestOfDeps)
+          }
+        }))
     )
 
 

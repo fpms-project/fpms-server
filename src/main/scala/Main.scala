@@ -1,12 +1,11 @@
 package package_manager_server
 
+import cats.data.EitherT
 import cats.effect.Console.io._
 import cats.effect.IOApp
 import cats.effect._
-import cats.data.EitherT
-import cats.syntax.all._
-import cats.data._
 import cats.effect.concurrent.MVar
+import cats.syntax.all._
 import com.gilt.gfc.semver.SemVer
 import fs2.concurrent.Topic
 import package_manager_server.VersionCondition._
@@ -26,14 +25,11 @@ object Main extends IOApp {
       } yield Right(new PackageUpdateSubscriberManager[IO](mvar, topic))
       x
     })
-    _ <- (0 to 100000 toList).map(i => PackageInfo(i.toString, SemVer("1.0.0"), Map.empty)).map(p => manager.addNewPackage(p)).toNel.map(l => EitherT.right(l.map(_.value).parSequence_)).getOrElse(EitherT.rightT[IO, Unit](()))
     _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
-    _ <- manager.addNewPackage(PackageInfo("B", SemVer("1.0.0"), Map.empty))
-    _ <- manager.addNewPackage(PackageInfo("C", SemVer("1.0.0"), Map.empty))
-
+    _ <- (0 to 100000 toList).map(i => PackageInfo(i.toString, SemVer("1.0.0"), Map("A" -> "*"))).map(p => manager.addNewPackage(p)).toNel.map(l => EitherT.right(l.map(_.value).parSequence_)).getOrElse(EitherT.rightT[IO, Unit](()))
+    // _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
     _ <- manager.addNewPackage(PackageInfo("D", SemVer("1.0.0"), Map("A" -> "*")))
     _ <- printDep("D", SemVer("1.0.0"), manager)
-
     _ <- manager.addNewPackage(PackageInfo("A", SemVer("2.0.0"), Map.empty))
     _ <- sleep(1.seconds)
     _ <- printDep("D", SemVer("1.0.0"), manager)
@@ -42,11 +38,10 @@ object Main extends IOApp {
 
 
   def printDep(name: String, version: SemVer, packageUpdateSubscriberManager: PackageUpdateSubscriberManager[IO]): EitherT[IO, Any, Unit] =
-    EitherT.right(
-      packageUpdateSubscriberManager.getDependencies(name, version).flatMap(
-        x => putStrLn(s"${name}@${version.original} -> ${x.map(_.map(d => s"${d.name}@${d.version.original}").mkString(",")).getOrElse("")}")
-      )
+    packageUpdateSubscriberManager.getDependencies(name, version).flatMap(
+      x => EitherT.right[Any](putStrLn(s"Deps: ${name}@${version.original} -> ${x.map(d => s"${d.name}@${d.version.original}").mkString(",")}"))
     )
 
-  def sleep(duration: FiniteDuration):EitherT[IO, Any, Unit] = EitherT.right(IO.sleep(duration))
+
+  def sleep(duration: FiniteDuration): EitherT[IO, Any, Unit] = EitherT.right(IO.sleep(duration))
 }

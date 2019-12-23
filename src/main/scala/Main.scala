@@ -26,6 +26,7 @@ object Main extends IOApp {
       x
     })
     _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
+    _ <- sleep(1.seconds)
     _ <- (0 to 100000 toList).map(i => PackageInfo(i.toString, SemVer("1.0.0"), Map("A" -> "*"))).map(p => manager.addNewPackage(p)).toNel.map(l => EitherT.right(l.map(_.value).parSequence_)).getOrElse(EitherT.rightT[IO, Unit](()))
     // _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
     _ <- manager.addNewPackage(PackageInfo("D", SemVer("1.0.0"), Map("A" -> "*")))
@@ -41,7 +42,6 @@ object Main extends IOApp {
     packageUpdateSubscriberManager.getDependencies(name, version).flatMap(
       x => EitherT.right[Any](putStrLn(s"Deps: ${name}@${version.original} -> ${x.map(d => s"${d.name}@${d.version.original}").mkString(",")}"))
     )
-
 
   def sleep(duration: FiniteDuration): EitherT[IO, Any, Unit] = EitherT.right(IO.sleep(duration))
 }

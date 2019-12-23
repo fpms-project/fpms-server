@@ -15,7 +15,7 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
   } yield mago ++ children
 
   def addNewVersion(newPack: PackageInfo, deps: Seq[PackageInfo]): F[Boolean] = {
-    println(s"add New Version: ${newPack.name}@${newPack.version.original} -> ${info.name}@${info.version.original}")
+    // println(s"add New Version: ${newPack.name}@${newPack.version.original} -> ${info.name}@${info.version.original}")
     if (info.dep.get(newPack.name).exists(_.valid(newPack.version)) && info.version < newPack.version) {
       for {
         m <- dep.take.map(_.updated(newPack.name, newPack))

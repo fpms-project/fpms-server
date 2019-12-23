@@ -1,13 +1,14 @@
 package package_manager_server
 
 import cats.effect.Concurrent
+import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
 import fs2.concurrent.Queue
 import fs2.concurrent.Topic
 import fs2.Stream
 import cats.implicits._
 
-class TopicManager[F[_] : Concurrent](private val topicMap: MVar[F, Map[String, Topic[F, PackageUpdateEvent]]]) {
+class TopicManager[F[_] : Concurrent](private val topicMap: MVar[F, Map[String, Topic[F, PackageUpdateEvent]]])(implicit f: ConcurrentEffect[F]) {
   def subscribeTopic(packageName: String, queue: Queue[F, PackageUpdateEvent]) =
     Stream.eval(topicMap.read)
       .map({

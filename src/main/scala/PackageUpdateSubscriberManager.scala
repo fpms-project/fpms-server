@@ -27,12 +27,10 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         subs <- createNewSubscriber(pack)
         d <- EitherT.right[Any](map.take.map(_.updated(pack.name, subs)))
         _ <- EitherT.right[Any](map.put(d))
-      } yield {
-        f.toIO(subs.start).unsafeRunAsyncAndForget()
-        subs
-      })(e => EitherT.right(f.pure(e)))
-    _ <- EitherT.rightT[F, Unit](pack.dep.keys.foreach(d => f.toIO(topicManager.subscribeTopic(d, subscriber.queue)).unsafeRunAsyncAndForget()))
+      } yield subs)(e => EitherT.right(f.pure(e)))
+    _ <- EitherT.rightT[F, Unit](pack.dep.keys.toSeq.foreach(d => f.toIO(topicManager.subscribeTopic(d, subscriber.queue)).unsafeRunAsyncAndForget()))
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
+    _ <- EitherT.rightT(f.toIO(subscriber.start).unsafeRunAsyncAndForget())
   } yield ()
 
   def getDependencies(name: String, version: SemVer): EitherT[F, PUSMError, Seq[PackageInfo]] =
@@ -80,11 +78,11 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         queue <- Queue.unbounded[F, PackageUpdateEvent]
         topic <- topicManager.addNewNamePackage(pack)
         mv <- MVar.of[F, Seq[PackageDepsContainer[F]]](Seq.empty)
-      } yield Right(new PackageUpdateSubscriber[F](mv, queue, topic))
+      } yield Right(new PackageUpdateSubscriber[F](System.currentTimeMillis, mv, queue, topic))
     )
 }
 
-object PackageUpdateSubscriberManager {
+object PackageUpdateSubscriberManager { 
 
   sealed trait PUSMError
 

@@ -75,14 +75,14 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
   def createNewSubscriber(pack: PackageInfo): EitherT[F, PUSMError, PackageUpdateSubscriber[F]] =
     EitherT(
       for {
-        queue <- Queue.unbounded[F, PackageUpdateEvent]
+        queue <- Queue.bounded[F, PackageUpdateEvent](100)
         topic <- topicManager.addNewNamePackage(pack)
         mv <- MVar.of[F, Seq[PackageDepsContainer[F]]](Seq.empty)
       } yield Right(new PackageUpdateSubscriber[F](System.currentTimeMillis, mv, queue, topic))
     )
 }
 
-object PackageUpdateSubscriberManager { 
+object PackageUpdateSubscriberManager {
 
   sealed trait PUSMError
 

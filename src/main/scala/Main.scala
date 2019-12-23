@@ -27,13 +27,13 @@ object Main extends IOApp {
     })
     _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
     _ <- sleep(1.seconds)
-    _ <- (0 to 100000 toList).map(i => PackageInfo(i.toString, SemVer("1.0.0"), Map("A" -> "*"))).map(p => manager.addNewPackage(p)).toNel.map(l => EitherT.right(l.map(_.value).parSequence_)).getOrElse(EitherT.rightT[IO, Unit](()))
-    // _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
+    _ <- (0 to 1000 toList).map(i => PackageInfo(i.toString, SemVer("1.0.0"), Map("A" -> "*"))).map(p => manager.addNewPackage(p)).toNel.map(l => EitherT.right(l.map(_.value).parSequence_)).getOrElse(EitherT.rightT[IO, Unit](()))
     _ <- manager.addNewPackage(PackageInfo("D", SemVer("1.0.0"), Map("A" -> "*")))
     _ <- printDep("D", SemVer("1.0.0"), manager)
     _ <- manager.addNewPackage(PackageInfo("A", SemVer("2.0.0"), Map.empty))
     _ <- sleep(1.seconds)
     _ <- printDep("D", SemVer("1.0.0"), manager)
+    _ <- (0 to 1000 toList).map(_.toString).map(e => printDep(e, SemVer("1.0.0"), manager)).toNel.map(l => EitherT.right(l.map(_.value).parSequence_)).get
     _ <- sleep(10.seconds)
   } yield ExitCode.Success
 

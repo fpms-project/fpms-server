@@ -1,18 +1,20 @@
 package package_manager_server
 
+import java.util.concurrent.Executors
 import cats.effect.Concurrent
 import cats.effect.concurrent.MVar
 import cats.implicits._
-import com.gilt.gfc.semver.SemVer
 import fs2.Stream
 import fs2.concurrent.Queue
 import fs2.concurrent.Topic
 import package_manager_server.VersionCondition._
+import scala.concurrent.ExecutionContext
 
 
 class PackageUpdateSubscriber[F[_]](createdTime: Long, containers: MVar[F, Seq[PackageDepsContainer[F]]], val queue: Queue[F, PackageUpdateEvent], topic: Topic[F, PackageUpdateEvent])(
   implicit F: Concurrent[F]
 ) {
+  implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
 
   def addNewVersion(container: PackageDepsContainer[F]): F[Unit] =
     for {

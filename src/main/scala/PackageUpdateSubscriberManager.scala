@@ -6,7 +6,6 @@ import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
-import com.gilt.gfc.semver.SemVer
 import fs2.concurrent.Queue
 import package_manager_server.VersionCondition._
 

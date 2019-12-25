@@ -35,7 +35,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
   } yield ()
 
-  def getDependencies(name: String, version: SemVer): EitherT[F, PUSMError, Seq[PackageInfo]] =
+  def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, Seq[PackageInfo]] =
     EitherT(
       map.read
         .map(_.get(name))
@@ -59,8 +59,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     EitherT(
       deps.map(
         e => for {
-          v <- map.read
-            .map(_.get(e._1))
+          v <- map.read.map(_.get(e._1))
           d <- f.pure(v).flatMap[Option[PackageDepsContainer[F]]](_.map(_.getLatestVersion(e._2)).getOrElse(f.pure(None)))
         } yield d
       ).toList.toNel.fold(f.delay[Either[PUSMError, Map[String, PackageDepsContainer[F]]]](Right(Map.empty[String, PackageDepsContainer[F]])))(list =>
@@ -70,7 +69,8 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
           } else {
             Left(CantGetLatestOfDeps)
           }
-        }))
+        })
+      )
     )
 
 

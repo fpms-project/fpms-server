@@ -7,7 +7,7 @@ import com.gilt.gfc.semver.SemVer
 import fs2.Stream
 import fs2.concurrent.Queue
 import fs2.concurrent.Topic
-import VersionCondition._
+import package_manager_server.VersionCondition._
 
 
 class PackageUpdateSubscriber[F[_]](createdTime: Long, containers: MVar[F, Seq[PackageDepsContainer[F]]], val queue: Queue[F, PackageUpdateEvent], topic: Topic[F, PackageUpdateEvent])(
@@ -23,9 +23,8 @@ class PackageUpdateSubscriber[F[_]](createdTime: Long, containers: MVar[F, Seq[P
       _ <- topic.publish1(AddNewVersion(System.currentTimeMillis, container.info, deps))
     } yield ()
 
-  def getDependencies(version: SemVer): F[Option[Seq[PackageInfo]]] = for {
-    x <- containers.read.flatMap(_.find(p => p.info.version == version).fold(F.delay[Option[Seq[PackageInfo]]](None))(_.dependencies.map(e => Some(e))))
-  } yield x
+  def getDependencies(condition: VersionCondition): F[Option[Seq[PackageInfo]]] =
+    getLatestVersion(condition).flatMap(_.fold(F.pure[Option[Seq[PackageInfo]]](None))(e => e.dependencies.map(e => Some(e))))
 
   def getLatestVersion(condition: VersionCondition): F[Option[PackageDepsContainer[F]]] =
     containers.read.map(_.filter(e => condition.valid(e.info.version)).sortWith((x, y) => x.info.version > y.info.version).headOption)
@@ -33,6 +32,7 @@ class PackageUpdateSubscriber[F[_]](createdTime: Long, containers: MVar[F, Seq[P
   def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
     readContainer
       .evalMap(c => {
+        println(s"[event]: Add new version in dep(${event.packageInfo.name})")
         c.addNewVersion(event.packageInfo, event.dependencies).map(result => (c, result))
       })
       .filter(_._2)

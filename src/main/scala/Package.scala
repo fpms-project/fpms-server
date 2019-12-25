@@ -15,14 +15,16 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
   } yield mago ++ children
 
   def addNewVersion(newPack: PackageInfo, deps: Seq[PackageInfo]): F[Boolean] = {
-    // println(s"add New Version: ${newPack.name}@${newPack.version.original} -> ${info.name}@${info.version.original}")
-    if (info.dep.get(newPack.name).exists(_.valid(newPack.version)) && info.version < newPack.version) {
-      for {
-        m <- dep.take.map(_.updated(newPack.name, newPack))
-        _ <- dep.put(m)
-        x <- depPackages.take.map(_.updated(newPack.name, deps))
-        _ <- depPackages.put(x)
-      } yield true
+    if (info.dep.get(newPack.name).exists(_.valid(newPack.version))) {
+      dep.read.map(_.get(newPack.name)).flatMap {
+        case Some(e) if e.version < newPack.version => for {
+          m <- dep.take.map(_.updated(newPack.name, newPack))
+          _ <- dep.put(m)
+          x <- depPackages.take.map(_.updated(newPack.name, deps))
+          _ <- depPackages.put(x)
+        } yield true
+        case _ => F.pure(false)
+      }
     } else {
       F.pure(false)
     }

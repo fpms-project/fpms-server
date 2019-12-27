@@ -3,12 +3,12 @@ package package_manager_server
 import cats.effect._
 import cats.effect.concurrent.MVar
 import cats.implicits._
-import com.gilt.gfc.semver.SemVer
-import VersionCondition._
 
 class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String, PackageInfo]], depPackages: MVar[F, Map[String, Seq[PackageInfo]]])(
   implicit F: Concurrent[F]
 ) {
+
+  import VersionCondition._
   def dependencies: F[Seq[PackageInfo]] = for {
     mago <- depPackages.read.map(_.values.flatten[PackageInfo].toList)
     children <- dep.read.map(_.values.toList)
@@ -39,6 +39,4 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
       case _ => F.pure(false)
     }
 }
-
-case class PackageInfo(name: String, version: SemVer, dep: Map[String, VersionCondition])
 

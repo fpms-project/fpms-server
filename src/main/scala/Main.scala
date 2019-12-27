@@ -1,14 +1,12 @@
 package package_manager_server
 
 import cats.data.EitherT
-import cats.effect.Console.io._
 import cats.effect.IOApp
 import cats.effect._
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
 import com.gilt.gfc.semver.SemVer
 import fs2.concurrent.Topic
-import io.circe.generic.auto._
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.io._
@@ -17,30 +15,20 @@ import package_manager_server.VersionCondition._
 import scala.concurrent.duration._
 
 object Main extends IOApp {
-  override def run(arg: List[String]) = core.value.map {
-    case Right(v) => ()
-    case Left(e) => println(s"Error :$e")
+  override def run(arg: List[String]) = core.value.flatMap {
+    case Right(v) => v.serve.compile.drain
+    case Left(v) => IO {
+      println(v)
+    }
   }.as(ExitCode.Success)
 
 
+  import org.http4s.server.blaze._
+
   def core = for {
     manager <- createPackageUpdateSubscriberManager
-    _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.0"), Map.empty))
+  } yield BlazeServerBuilder[IO].bindHttp(8080).withHttpApp(Server.server(manager))
 
-    _ <- manager.addNewPackage(PackageInfo("B", SemVer("1.0.0"), Map.empty))
-    _ <- manager.addNewPackage(PackageInfo("D", SemVer("1.0.0"), Map("A" -> "^1.0.0")))
-    _ <- printDep("D", "1.0.0", manager)
-    _ <- manager.addNewPackage(PackageInfo("A", SemVer("1.0.4"), Map.empty))
-    _ <- sleep(1.seconds)
-    _ <- printDep("D", "1.0.0", manager)
-    _ <- sleep(10.seconds)
-  } yield ExitCode.Success
-
-
-  def printDep(name: String, version: VersionCondition, packageUpdateSubscriberManager: PackageUpdateSubscriberManager[IO]): EitherT[IO, Any, Unit] =
-    packageUpdateSubscriberManager.getDependencies(name, version).flatMap(
-      x => EitherT.right[Any](putStrLn(s"Deps: $name@$version -> ${x.map(d => s"${d.name}@${d.version.original}").mkString(",")}"))
-    )
 
   def sleep(duration: FiniteDuration): EitherT[IO, Any, Unit] = EitherT.right(IO.sleep(duration))
 
@@ -56,18 +44,25 @@ object Main extends IOApp {
 }
 
 
-
 object Server {
-  case class PackageInfo(version: String, name: String)
 
-  implicit val decoder = jsonOf[IO, PackageInfo]
+  import PackageInfo._
+  import io.circe.generic.auto._
+  import io.circe.syntax._
+  import org.http4s.circe.CirceEntityDecoder._
+
+
   def server(manager: PackageUpdateSubscriberManager[IO]) = HttpRoutes.of[IO] {
-    case req @ GET -> Root / "getDeps" =>
+    case GET -> Root / "get_deps" / name / version =>
       for {
-        info <- req.as[PackageInfo]
-        les <- manager.getDependencies(info.name,info.version).value
+        les <- manager.getDependencies(name, version).value
+        resp <- Ok(les.asJson)
+      } yield resp
+    case req@POST -> Root / "add_deps" =>
+      for {
+        pack <- req.as[PackageInfo]
+        _ <- manager.addNewPackage(pack).value
         resp <- Ok(())
       } yield resp
-
   }.orNotFound
 }

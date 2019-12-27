@@ -7,7 +7,7 @@ import cats.effect.ContextShift
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
 import fs2.concurrent.Queue
-import package_manager_server.VersionCondition._
+import VersionCondition._
 
 class PackageUpdateSubscriberManager[F[_] : ContextShift](
   map: MVar[F, Map[String, PackageUpdateSubscriber[F]]], topicManager: TopicManager[F]
@@ -54,7 +54,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         .getOrElse(f.pure(Map.empty[String, Seq[PackageInfo]]))
     )
 
-  def getLatestsOfDeps(deps: Map[String, VersionCondition]): EitherT[F, PUSMError, Map[String, PackageDepsContainer[F]]] =
+  def getLatestsOfDeps(deps: Map[String, String]): EitherT[F, PUSMError, Map[String, PackageDepsContainer[F]]] =
     EitherT(
       deps.map(
         e => for {
@@ -87,8 +87,12 @@ object PackageUpdateSubscriberManager {
 
   sealed trait PUSMError
 
-  case class CantCreateNewSubscriber(reason: String) extends PUSMError
+  case object CantCreateNewSubscriber extends PUSMError
 
   case object CantGetLatestOfDeps extends PUSMError
+
+  import io.circe._
+
+  implicit val encode: Encoder[PUSMError] = Encoder.instance(a => Json.fromString(a.toString))
 
 }

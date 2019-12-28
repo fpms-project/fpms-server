@@ -1,4 +1,4 @@
-package package_manager_server
+package fpms
 
 import cats.Parallel
 import cats.data.EitherT
@@ -6,8 +6,8 @@ import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
+import fpms.VersionCondition._
 import fs2.concurrent.Queue
-import VersionCondition._
 
 class PackageUpdateSubscriberManager[F[_] : ContextShift](
   map: MVar[F, Map[String, PackageUpdateSubscriber[F]]], topicManager: TopicManager[F]

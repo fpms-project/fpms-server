@@ -1,4 +1,4 @@
-package package_manager_server
+package fpms
 
 import java.util.concurrent.Executors
 import cats.effect.Concurrent

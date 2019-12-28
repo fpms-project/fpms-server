@@ -1,4 +1,4 @@
-package package_manager_server
+package fpms
 
 import cats.effect._
 import cats.effect.concurrent.MVar

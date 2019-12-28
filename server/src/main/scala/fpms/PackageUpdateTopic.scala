@@ -1,4 +1,4 @@
-package package_manager_server
+package fpms
 
 sealed trait PackageUpdateEvent
 

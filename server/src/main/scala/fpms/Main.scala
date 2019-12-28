@@ -1,36 +1,33 @@
-package package_manager_server
+package fpms
 
 import cats.data.EitherT
 import cats.effect.IOApp
 import cats.effect._
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
-import com.gilt.gfc.semver.SemVer
+import fpms.VersionCondition._
 import fs2.concurrent.Topic
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.io._
 import org.http4s.implicits._
-import package_manager_server.VersionCondition._
-import scala.concurrent.duration._
 
 object Main extends IOApp {
-  override def run(arg: List[String]) = core.value.flatMap {
-    case Right(v) => v.serve.compile.drain
-    case Left(v) => IO {
-      println(v)
-    }
-  }.as(ExitCode.Success)
-
 
   import org.http4s.server.blaze._
 
-  def core = for {
-    manager <- createPackageUpdateSubscriberManager
-  } yield BlazeServerBuilder[IO].bindHttp(8080).withHttpApp(Server.server(manager))
-
-
-  def sleep(duration: FiniteDuration): EitherT[IO, Any, Unit] = EitherT.right(IO.sleep(duration))
+  override def run(arg: List[String]) =
+    createPackageUpdateSubscriberManager
+      .map(manager =>
+        BlazeServerBuilder[IO].bindHttp(8080).withHttpApp(Server.server(manager))
+      )
+      .value
+      .flatMap {
+        case Right(v) => v.serve.compile.drain
+        case Left(v) => IO {
+          println(v)
+        }
+      }.as(ExitCode.Success)
 
   def createPackageUpdateSubscriberManager: EitherT[IO, Any, PackageUpdateSubscriberManager[IO]] =
     EitherT[IO, Any, PackageUpdateSubscriberManager[IO]]({
@@ -50,7 +47,6 @@ object Server {
   import io.circe.generic.auto._
   import io.circe.syntax._
   import org.http4s.circe.CirceEntityDecoder._
-
 
   def server(manager: PackageUpdateSubscriberManager[IO]) = HttpRoutes.of[IO] {
     case GET -> Root / "get_deps" / name / version =>

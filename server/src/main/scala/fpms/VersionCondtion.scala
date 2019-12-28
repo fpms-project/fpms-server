@@ -1,4 +1,4 @@
-package package_manager_server
+package fpms
 
 import com.gilt.gfc.semver.SemVer
 

@@ -16,7 +16,7 @@ lazy val client = (project in file("client")).settings(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
   scalacOptions := defaultscalacOptions
-)
+).dependsOn(server)
 
 lazy val server = (project in file("server")).settings(
   name := "fpms",
@@ -48,8 +48,10 @@ lazy val http4sDeps = Seq(
 ).map(_ % Http4sVersion) ++ Seq("ch.qos.logback" % "logback-classic" % LogbackVersion)
 
 lazy val CirceDeps = Seq(
+  "io.circe" %% "circe-core",
   "io.circe" %% "circe-generic",
   "io.circe" %% "circe-generic-extras",
+  "io.circe" %% "circe-parser"
 ).map(_  % CirceVersion)
 
 lazy val defaultscalacOptions = Seq(

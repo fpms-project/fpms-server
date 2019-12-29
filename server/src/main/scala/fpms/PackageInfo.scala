@@ -12,7 +12,7 @@ object PackageInfo {
     new PackageInfo(name, SemVer(version), dep)
 
   implicit val encoderPackageInfo: Encoder[PackageInfo] =
-    Encoder.forProduct2("name", "version")(p => (p.name, p.version.original))
+    Encoder.forProduct3("name", "version", "dep")(p => (p.name, p.version.original, p.dep))
 
   implicit val decoderPackageInfo: Decoder[PackageInfo] =
     Decoder.forProduct3[PackageInfo, String, String, Map[String, String]]("name", "version", "dep")(

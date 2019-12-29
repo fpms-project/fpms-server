@@ -6,7 +6,7 @@ import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
-import fpms.VersionCondition._
+import VersionCondition._
 import fs2.concurrent.Queue
 
 class PackageUpdateSubscriberManager[F[_] : ContextShift](

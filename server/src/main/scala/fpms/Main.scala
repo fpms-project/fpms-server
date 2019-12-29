@@ -5,7 +5,7 @@ import cats.effect.IOApp
 import cats.effect._
 import cats.effect.concurrent.MVar
 import cats.syntax.all._
-import fpms.VersionCondition._
+import VersionCondition._
 import fs2.concurrent.Topic
 import org.http4s.HttpRoutes
 import org.http4s.circe._
@@ -54,7 +54,7 @@ object Server {
         les <- manager.getDependencies(name, version).value
         resp <- Ok(les.asJson)
       } yield resp
-    case req@POST -> Root / "add_deps" =>
+    case req@POST -> Root / "add_package" =>
       for {
         pack <- req.as[PackageInfo]
         _ <- manager.addNewPackage(pack).value

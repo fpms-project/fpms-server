@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 import cats.effect.Concurrent
 import cats.effect.concurrent.MVar
 import cats.implicits._
-import fpms.VersionCondition._
+import VersionCondition._
 import fs2.Stream
 import fs2.concurrent.Queue
 import fs2.concurrent.Topic

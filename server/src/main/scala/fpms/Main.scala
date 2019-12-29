@@ -4,40 +4,36 @@ import cats.data.EitherT
 import cats.effect.IOApp
 import cats.effect._
 import cats.effect.concurrent.MVar
-import cats.syntax.all._
-import VersionCondition._
+import fpms.VersionCondition._
 import fs2.concurrent.Topic
 import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl.io._
 import org.http4s.implicits._
+import cats.implicits._
 
 object Main extends IOApp {
 
   import org.http4s.server.blaze._
 
-  override def run(arg: List[String]) =
-    createPackageUpdateSubscriberManager
-      .map(manager =>
-        BlazeServerBuilder[IO].bindHttp(8080).withHttpApp(Server.server(manager))
-      )
-      .value
-      .flatMap {
-        case Right(v) => v.serve.compile.drain
-        case Left(v) => IO {
-          println(v)
-        }
-      }.as(ExitCode.Success)
+  override def run(arg: List[String]) = {
+    val topicManager = createTopicManager.value.unsafeRunSync().right.get
+    val manager = createPackageUpdateSubscriberManager(topicManager).value.unsafeRunSync().right.get
+    val jsonLoader = new JsonLoader(topicManager,manager)
+    jsonLoader.initialize(1)
+    BlazeServerBuilder[IO].bindHttp(8080).withHttpApp(Server.server(manager)).serve.compile.drain.as(ExitCode.Success)
+  }
 
-  def createPackageUpdateSubscriberManager: EitherT[IO, Any, PackageUpdateSubscriberManager[IO]] =
+
+  def createPackageUpdateSubscriberManager(topic: TopicManager[IO]): EitherT[IO, Any, PackageUpdateSubscriberManager[IO]] =
     EitherT[IO, Any, PackageUpdateSubscriberManager[IO]]({
       for {
         mvar <- MVar.of[IO, Map[String, PackageUpdateSubscriber[IO]]](Map.empty)
-        topic <- for {
-          mvar2 <- MVar.of[IO, Map[String, Topic[IO, PackageUpdateEvent]]](Map.empty)
-        } yield new TopicManager[IO](mvar2)
       } yield Right(new PackageUpdateSubscriberManager[IO](mvar, topic))
     })
+
+  def createTopicManager: EitherT[IO, Any, TopicManager[IO]] =
+    EitherT.right[Any](MVar.of[IO, Map[String, Topic[IO, PackageUpdateEvent]]](Map.empty).map(mvar2 => new TopicManager[IO](mvar2)))
 }
 
 
@@ -52,6 +48,11 @@ object Server {
     case GET -> Root / "get_deps" / name / version =>
       for {
         les <- manager.getDependencies(name, version).value
+        resp <- Ok(les.asJson)
+      } yield resp
+    case GET -> Root / "counts" =>
+      for {
+        les <- manager.countPackageNames().value
         resp <- Ok(les.asJson)
       } yield resp
     case req@POST -> Root / "add_package" =>

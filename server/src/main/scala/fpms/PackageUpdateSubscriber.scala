@@ -1,20 +1,31 @@
 package fpms
 
 import java.util.concurrent.Executors
-import cats.effect.Concurrent
+import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
 import cats.implicits._
-import VersionCondition._
+import fpms.VersionCondition._
 import fs2.Stream
 import fs2.concurrent.Queue
 import fs2.concurrent.Topic
 import scala.concurrent.ExecutionContext
 
 
-class PackageUpdateSubscriber[F[_]](createdTime: Long, containers: MVar[F, Seq[PackageDepsContainer[F]]], val queue: Queue[F, PackageUpdateEvent], topic: Topic[F, PackageUpdateEvent])(
-  implicit F: Concurrent[F]
+class PackageUpdateSubscriber[F[_]](
+  val name: String,
+  createdTime: Long,
+  containers: MVar[F, Seq[PackageDepsContainer[F]]],
+  val queue: Queue[F, PackageUpdateEvent],
+  topic: Topic[F, PackageUpdateEvent],
+  val alreadySubscribed: MVar[F, Seq[String]]
+)(
+  implicit F: ConcurrentEffect[F]
 ) {
   implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
+
+  def deleteAllinQueue(): Unit = {
+    while (F.toIO(queue.tryDequeue1).unsafeRunSync().isDefined) {}
+  }
 
   def addNewVersion(container: PackageDepsContainer[F]): F[Unit] =
     for {
@@ -34,7 +45,7 @@ class PackageUpdateSubscriber[F[_]](createdTime: Long, containers: MVar[F, Seq[P
   def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
     readContainer
       .evalMap(c => {
-        println(s"[event]: Add new version in dep(${event.packageInfo.name})")
+        println(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original})")
         c.addNewVersion(event.packageInfo, event.dependencies).map(result => (c, result))
       })
       .filter(_._2)

@@ -24,9 +24,9 @@ class TopicManager[F[_] : Concurrent](private val topicMap: MVar[F, Map[String, 
         input.subscribe(1000).through(queue.enqueue)
       }).compile.drain
 
-  def addNewNamePackage(pack: PackageInfo) = for {
-    topic <- Topic[F, PackageUpdateEvent](AddNewNamePackage(pack.name))
-    m <- topicMap.take.map(_.updated(pack.name, topic))
+  def addNewNamePackage(name: String) = for {
+    topic <- Topic[F, PackageUpdateEvent](AddNewNamePackage(name))
+    m <- topicMap.take.map(_.updated(name, topic))
     _ <- topicMap.put(m)
   } yield topic
 

@@ -5,6 +5,6 @@ case class RootInterface (
 
 case class Versions (
   version: String,
-  dep: Map[String, String]
+  dep: Option[Map[String, String]]
 )
 

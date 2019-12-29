@@ -24,3 +24,6 @@ project/plugins/project/
 
 .idea/
 null/
+
+jsons/*
+!jsons/.gitkeep

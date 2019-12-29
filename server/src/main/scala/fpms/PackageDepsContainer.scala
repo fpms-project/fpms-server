@@ -12,7 +12,7 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
   def dependencies: F[Seq[PackageInfo]] = for {
     mago <- depPackages.read.map(_.values.flatten[PackageInfo].toList)
     children <- dep.read.map(_.values.toList)
-  } yield mago ++ children
+  } yield mago ++ children :+ info
 
   def addNewVersion(newPack: PackageInfo, deps: Seq[PackageInfo]): F[Boolean] = {
     if (info.dep.get(newPack.name).exists(_.valid(newPack.version))) {

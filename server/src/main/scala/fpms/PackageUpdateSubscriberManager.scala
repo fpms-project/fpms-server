@@ -2,10 +2,11 @@ package fpms
 
 import cats.Parallel
 import cats.data.EitherT
+import cats.data._
 import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.effect.concurrent.MVar
-import cats.syntax.all._
+import cats.implicits._
 import fpms.VersionCondition._
 import fs2.concurrent.Queue
 
@@ -73,11 +74,11 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     } else {
       val list = deps.map(
         e => for {
-          v <- EitherT(subsmap.read.map(_.get(e._1).toRight[PUSMError](DepPackageNotFound)))
-          d <- EitherT(v.getLatestVersion(e._2).map(_.toRight[PUSMError](DepPackageVersionNotFound)))
+          v <- OptionT(subsmap.read.map(_.get(e._1)))
+          d <- OptionT(v.getLatestVersion(e._2))
         } yield d
       ).toList.toNel.get
-      list.parSequence.map(e => e.toList.map(e => (e.info.name, e)).toMap)
+      list.parSequence.map(e => e.toList.map(e => (e.info.name, e)).toMap).toRight(CantGetLatestOfDeps)
     }
   }
 
@@ -109,6 +110,8 @@ object PackageUpdateSubscriberManager {
   case object PackageNotFound extends PUSMError
 
   case object PackageVersionNotFound extends PUSMError
+
+
 
   import io.circe._
 

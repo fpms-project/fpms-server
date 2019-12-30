@@ -6,10 +6,7 @@
     </appender>
 
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>logs/logback-sample_%d{yyyyMMdd_HHmmss}.log</fileNamePattern>
-        </rollingPolicy>
-        <file>logs/logback-sample_%d{yyyyMMdd_HHmmss}.log</file>
+        <file>logs/first.log</file>
         <encoder>
             <charset>UTF-8</charset>
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
@@ -19,6 +16,6 @@
     <logger name="chapters.configuration" level="INFO"/>
 
     <root level="info">
-        <appender-ref ref="file" />
+        <appender-ref ref="FILE" />
     </root>
 </configuration>

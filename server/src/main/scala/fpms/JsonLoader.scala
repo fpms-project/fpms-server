@@ -7,10 +7,11 @@ import cats.effect.concurrent.MVar
 import fs2.concurrent.Queue
 import io.circe.generic.auto._
 import io.circe.parser.decode
+import org.slf4j.LoggerFactory
 import scala.io.Source
 
 class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager: PackageUpdateSubscriberManager[IO])(implicit c: ConcurrentEffect[IO]) {
-
+  private val logger = LoggerFactory.getLogger(this.getClass)
   private var already: Seq[String] = Seq.empty
 
   def initialize(fileCount: Int = 1, max: Int = 5) = {
@@ -24,12 +25,12 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       if(result._2.nonEmpty){
         remainList :+ result._2
       }
-      println(s"[JSONLOADER] add: ${v.name}")
+      logger.info(s"[JSONLOADER] add: ${v.name}")
     })
     var count = 0
     while ((list.nonEmpty || remainList.nonEmpty) && count < max) {
       count += 1
-      println(s"[JSONLOADER] count: $count")
+      logger.info(s"[JSONLOADER] count: $count")
       list = list.filter(e => !already.contains(e.name))
       list.foreach(v => {
         val result = addPackageContainer_(v)
@@ -38,11 +39,11 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
         if(result._2.nonEmpty){
           remainList = remainList :+ result._2
         }
-        println(s"[JSONLOADER] add: ${v.name}, all: ${v.versions.length}, remain: ${result._2.length}")
+        logger.info(s"[JSONLOADER] add: ${v.name}, all: ${v.versions.length}, remain: ${result._2.length}")
       })
       remainList = remainList.map(e => {
         val result = addRemainPackages(e)
-        println(s"[JSONLOADER] add remain: ${e.head.name}, ${e.length} -> ${result.length}")
+        logger.info(s"[JSONLOADER] add remain: ${e.head.name}, ${e.length} -> ${result.length}")
         result
       }).filter(_.nonEmpty)
     }

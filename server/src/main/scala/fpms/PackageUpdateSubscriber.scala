@@ -8,6 +8,7 @@ import fpms.VersionCondition._
 import fs2.Stream
 import fs2.concurrent.Queue
 import fs2.concurrent.Topic
+import org.slf4j.LoggerFactory
 import scala.concurrent.ExecutionContext
 
 
@@ -21,6 +22,7 @@ class PackageUpdateSubscriber[F[_]](
 )(
   implicit F: ConcurrentEffect[F]
 ) {
+  private val logger = LoggerFactory.getLogger(this.getClass)
   implicit val ec: ExecutionContext = ExecutionContext.fromExecutor(Executors.newCachedThreadPool())
 
   def deleteAllinQueue(): Unit = {
@@ -29,7 +31,7 @@ class PackageUpdateSubscriber[F[_]](
 
   def addNewVersion(container: PackageDepsContainer[F]): F[Unit] =
     for {
-      _ <- F.pure(println(s"new version:${container.info.name}@${container.info.version.original}"))
+      _ <- F.pure(logger.info(s"new version:${container.info.name}@${container.info.version.original}"))
       newc <- containers.take.map(_ :+ container)
       _ <- containers.put(newc)
       deps <- container.dependencies
@@ -45,7 +47,7 @@ class PackageUpdateSubscriber[F[_]](
   def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
     readContainer
       .evalMap(c => {
-        println(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original})")
+        logger.info(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original})")
         c.addNewVersion(event.packageInfo, event.dependencies).map(result => (c, result))
       })
       .filter(_._2)

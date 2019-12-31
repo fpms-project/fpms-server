@@ -90,7 +90,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         topic <- topicManager.addNewNamePackage(pack.name)
         mv <- MVar.of[F, Seq[PackageDepsContainer[F]]](Seq.empty)
         already <- MVar.of[F, Seq[String]](Seq.empty)
-      } yield Right(new PackageUpdateSubscriber[F](pack.name, System.currentTimeMillis, mv, queue, topic, already))
+      } yield Right(new PackageUpdateSubscriber[F](pack.name, mv, queue, topic, already))
     )
 }
 

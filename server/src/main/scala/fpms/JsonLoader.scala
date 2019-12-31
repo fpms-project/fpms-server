@@ -25,12 +25,12 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       if(result._2.nonEmpty){
         remainList :+ result._2
       }
-      logger.info(s"[JSONLOADER] add: ${v.name}")
+      logger.info(s"add: ${v.name}")
     })
     var count = 0
     while ((list.nonEmpty || remainList.nonEmpty) && count < max) {
       count += 1
-      logger.info(s"[JSONLOADER] count: $count")
+      logger.info(s"count: $count")
       list = list.filter(e => !already.contains(e.name))
       list.foreach(v => {
         val result = addPackageContainer_(v)
@@ -39,11 +39,11 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
         if(result._2.nonEmpty){
           remainList = remainList :+ result._2
         }
-        logger.info(s"[JSONLOADER] add: ${v.name}, all: ${v.versions.length}, remain: ${result._2.length}")
+        logger.info(s"add: ${v.name}, all: ${v.versions.length}, remain: ${result._2.length}")
       })
       remainList = remainList.map(e => {
         val result = addRemainPackages(e)
-        logger.info(s"[JSONLOADER] add remain: ${e.head.name}, ${e.length} -> ${result.length}")
+        logger.info(s"add remain: ${e.head.name}, ${e.length} -> ${result.length}")
         result
       }).filter(_.nonEmpty)
     }
@@ -53,7 +53,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     val name = rootInterface.name
     val queue = Queue.bounded[IO, PackageUpdateEvent](100).unsafeRunSync()
     val topic = topicManager.addNewNamePackage(name).unsafeRunSync()
-    val containers = rootInterface.versions.map(e => {
+    val containers = rootInterface.versions.reverse.map(e => {
       val packageInfo = PackageInfo(name, e.version, e.dep)
       val result = for {
         latests <- packageUpdateSubscriberManager.getLatestsOfDeps(e.dep.getOrElse(Map.empty))
@@ -67,14 +67,14 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     allDeps.foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
     val mvar = MVar.of[IO, Seq[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }).unsafeRunSync()
     val alreadyS = MVar.of[IO, Seq[String]](allDeps).unsafeRunSync()
-    val subscriber = new PackageUpdateSubscriber[IO](name, System.currentTimeMillis, mvar, queue, topic, alreadyS)
+    val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()
     subscriber.start.unsafeRunAsyncAndForget()
     (subscriber, containers.collect { case Left(e) => e })
   }
 
   private def addRemainPackages(packages: Seq[PackageInfo]): Seq[PackageInfo] = {
-    packages.map(p => (p, packageUpdateSubscriberManager.addNewPackage(p))).map(v => v._2.value.unsafeRunSync().left map { _ => v._1 }).collect { case Left(e) => e }
+    packages.reverse.map(p => (p, packageUpdateSubscriberManager.addNewPackage(p))).map(v => v._2.value.unsafeRunSync().left map { _ => v._1 }).collect { case Left(e) => e }
   }
 
   private def filepath(count: Int): String = s"/run/media/sh4869/SSD/result2/$count.json"

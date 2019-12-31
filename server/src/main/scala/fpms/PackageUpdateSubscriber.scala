@@ -14,7 +14,6 @@ import scala.concurrent.ExecutionContext
 
 class PackageUpdateSubscriber[F[_]](
   val name: String,
-  createdTime: Long,
   containers: MVar[F, Seq[PackageDepsContainer[F]]],
   val queue: Queue[F, PackageUpdateEvent],
   topic: Topic[F, PackageUpdateEvent],
@@ -35,7 +34,7 @@ class PackageUpdateSubscriber[F[_]](
       newc <- containers.take.map(_ :+ container)
       _ <- containers.put(newc)
       deps <- container.dependencies
-      _ <- topic.publish1(AddNewVersion(System.currentTimeMillis, container.info, deps))
+      _ <- topic.publish1(AddNewVersion(container.info, deps))
     } yield ()
 
   def getDependencies(condition: VersionCondition): F[Option[Seq[PackageInfo]]] =
@@ -47,26 +46,29 @@ class PackageUpdateSubscriber[F[_]](
   def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
     readContainer
       .evalMap(c => {
-        logger.info(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original})")
+        logger.info(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original}) at $name")
         c.addNewVersion(event.packageInfo, event.dependencies).map(result => (c, result))
       })
       .filter(_._2)
-      .evalMap(x => x._1.dependencies.map(deps => UpdateDependency(System.currentTimeMillis, x._1.info, deps)))
+      .evalMap(x => x._1.dependencies.map(deps => UpdateDependency(x._1.info, deps)))
       .through(topic.publish)
 
   def onUpdateDependencies(event: UpdateDependency): Stream[F, Unit] =
     readContainer
-      .evalMap(v => v.updateDependencies(event.packageInfo, event.dependencies).map(result => (v, result)))
+      .evalMap(v => {
+        logger.info(s"[event]: update deps in dep(${event.packageInfo.name}@${event.packageInfo.version.original}) at $name")
+        v.updateDependencies(event.packageInfo, event.dependencies).map(result => (v, result))
+      })
       .filter(_._2)
-      .evalMap(x => x._1.dependencies.map(deps => UpdateDependency(System.currentTimeMillis, x._1.info, deps)))
+      .evalMap(x => x._1.dependencies.map(deps => UpdateDependency(x._1.info, deps)))
       .through(topic.publish)
 
   def readContainer: Stream[F, PackageDepsContainer[F]] =
     Stream.eval(containers.read).flatMap(x => Stream.apply(x: _*))
 
   def start: F[Unit] = queue.dequeue.flatMap(_ match {
-    case e: AddNewVersion if e.time > createdTime => onAddNewVersion(e)
-    case e: UpdateDependency if e.time > createdTime => onUpdateDependencies(e)
+    case e: AddNewVersion => onAddNewVersion(e)
+    case e: UpdateDependency => onUpdateDependencies(e)
     case _ => Stream(())
   }).compile.drain
 }

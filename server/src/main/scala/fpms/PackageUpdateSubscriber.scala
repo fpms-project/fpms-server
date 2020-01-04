@@ -37,13 +37,17 @@ class PackageUpdateSubscriber[F[_]](
       _ <- topic.publish1(AddNewVersion(container.info, deps))
     } yield ()
 
+  def getAllVersion:F[Seq[PackageInfo]] =
+    containers.read.map(_.map(_.info))
+
+
   def getDependencies(condition: VersionCondition): F[Option[Seq[PackageInfo]]] =
     getLatestVersion(condition).flatMap(_.fold(F.pure[Option[Seq[PackageInfo]]](None))(e => e.dependencies.map(e => Some(e))))
 
   def getLatestVersion(condition: VersionCondition): F[Option[PackageDepsContainer[F]]] =
     containers.read.map(_.filter(e => condition.valid(e.info.version)).sortWith((x, y) => x.info.version > y.info.version).headOption)
 
-  def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
+  private def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
     readContainer
       .evalMap(c => {
         logger.info(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original}) at $name")
@@ -53,7 +57,7 @@ class PackageUpdateSubscriber[F[_]](
       .evalMap(x => x._1.dependencies.map(deps => UpdateDependency(x._1.info, deps)))
       .through(topic.publish)
 
-  def onUpdateDependencies(event: UpdateDependency): Stream[F, Unit] =
+  private def onUpdateDependencies(event: UpdateDependency): Stream[F, Unit] =
     readContainer
       .evalMap(v => {
         logger.info(s"[event]: update deps in dep(${event.packageInfo.name}@${event.packageInfo.version.original}) at $name")

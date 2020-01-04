@@ -39,9 +39,9 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         subs
       })(e => EitherT.right(f.pure(e)))
     _ <- EitherT.rightT[F, Unit](pack.dep.keys.toSeq.foreach(d => f.toIO({
-      subscriber.alreadySubscribed.take.map(list => {
+      subscriber.alreadySubscribed.take.flatMap(list => {
         if (!list.contains(d)) {
-          topicManager.subscribeTopic(d, subscriber.queue).map(_ => subscriber.alreadySubscribed.put(list :+ d))
+          subscriber.alreadySubscribed.put(list :+ d).flatMap(_ => topicManager.subscribeTopic(d, subscriber.queue))
         } else {
           f.unit
         }
@@ -50,12 +50,18 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
   } yield ()
 
-  def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, Seq[PackageInfo]] =
+  def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, DepResult] =
     for {
       m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))
       // TODO: 型アノテーションいらないはず
       v <- EitherT[F, PUSMError, Seq[PackageInfo]](m.getDependencies(version).map(_.toRight(PackageVersionNotFound)))
-    } yield v
+    } yield DepResult(m, v)
+
+  def getPackage(name: String): EitherT[F, PUSMError, Seq[PackageInfo]] =
+    for {
+      m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))
+      x <- EitherT.right(m.getAllVersion)
+    } yield x
 
   def countPackageNames(): EitherT[F, PUSMError, Int] = EitherT.right(subsmap.read.map(_.size))
 
@@ -94,6 +100,8 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     )
 }
 
+case class DepResult(pack: PackageInfo, deps: Seq[PackageInfo])
+
 object PackageUpdateSubscriberManager {
 
   // TODO: error ハンドリングまともにする
@@ -110,7 +118,6 @@ object PackageUpdateSubscriberManager {
   case object PackageNotFound extends PUSMError
 
   case object PackageVersionNotFound extends PUSMError
-
 
 
   import io.circe._

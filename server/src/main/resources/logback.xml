@@ -4,7 +4,7 @@
             <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
-
+    <timestamp key="time" datePattern="yyyyMMdd_HHmmss" />
     <appender name="FILE" class="ch.qos.logback.core.FileAppender">
         <file>logs/log_${time}.log</file>
         <encoder>

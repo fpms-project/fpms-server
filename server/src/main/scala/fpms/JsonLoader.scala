@@ -70,6 +70,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()
     subscriber.start.unsafeRunAsyncAndForget()
+    logger.info(s"add: ${rootInterface.name}, deps: ${allDeps.mkString(",")}")
     (subscriber, containers.collect { case Left(e) => e })
   }
 

@@ -22,6 +22,8 @@ object Main extends IOApp {
   override def run(arg: List[String]) = {
     val topicManager = createTopicManager.value.unsafeRunSync().right.get
     val manager = createPackageUpdateSubscriberManager(topicManager).value.unsafeRunSync().right.get
+    // val jsonLoader = new JsonLoader(topicManager,manager)
+    // jsonLoader.initialize()
     for {
       _ <- manager.addNewPackage(PackageInfo("z", "1.0.0", Map.empty[String, String])).value
       _ <- manager.addNewPackage(PackageInfo("y", "1.0.0", Map.empty[String, String])).value
@@ -58,6 +60,7 @@ object Main extends IOApp {
 object Server {
 
   import PackageInfo._
+  import io.circe.generic.auto._
   import org.http4s.circe.CirceEntityDecoder._
 
   def server(manager: PackageUpdateSubscriberManager[IO]) = HttpRoutes.of[IO] {

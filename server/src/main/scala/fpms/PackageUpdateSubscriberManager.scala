@@ -52,10 +52,9 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
 
   def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, DepResult] =
     for {
-      m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))
-      // TODO: 型アノテーションいらないはず
-      v <- EitherT[F, PUSMError, Seq[PackageInfo]](m.getDependencies(version).map(_.toRight(PackageVersionNotFound)))
-    } yield DepResult(m, v)
+      m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))  
+      v <- EitherT(m.getDependencies(version).map(_.toRight[PUSMError](PackageVersionNotFound)))
+    } yield v
 
   def getPackage(name: String): EitherT[F, PUSMError, Seq[PackageInfo]] =
     for {
@@ -100,7 +99,6 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     )
 }
 
-case class DepResult(pack: PackageInfo, deps: Seq[PackageInfo])
 
 object PackageUpdateSubscriberManager {
 

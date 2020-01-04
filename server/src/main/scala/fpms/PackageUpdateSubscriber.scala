@@ -37,12 +37,12 @@ class PackageUpdateSubscriber[F[_]](
       _ <- topic.publish1(AddNewVersion(container.info, deps))
     } yield ()
 
-  def getAllVersion:F[Seq[PackageInfo]] =
+  def getAllVersion: F[Seq[PackageInfo]] =
     containers.read.map(_.map(_.info))
 
 
-  def getDependencies(condition: VersionCondition): F[Option[Seq[PackageInfo]]] =
-    getLatestVersion(condition).flatMap(_.fold(F.pure[Option[Seq[PackageInfo]]](None))(e => e.dependencies.map(e => Some(e))))
+  def getDependencies(condition: VersionCondition): F[Option[DepResult]] =
+    getLatestVersion(condition).flatMap(_.fold(F.pure[Option[DepResult]](None))(e => e.dependencies.map(l => Some(DepResult(e.info, l)))))
 
   def getLatestVersion(condition: VersionCondition): F[Option[PackageDepsContainer[F]]] =
     containers.read.map(_.filter(e => condition.valid(e.info.version)).sortWith((x, y) => x.info.version > y.info.version).headOption)
@@ -76,3 +76,5 @@ class PackageUpdateSubscriber[F[_]](
     case _ => Stream(())
   }).compile.drain
 }
+
+case class DepResult(pack: PackageInfo, deps: Seq[PackageInfo])

@@ -70,8 +70,9 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()
     subscriber.start.unsafeRunAsyncAndForget()
-    logger.info(s"add: ${rootInterface.name}, deps: ${allDeps.mkString(",")}")
-    (subscriber, containers.collect { case Left(e) => e })
+    val remain = containers.collect { case Left(e) => e }
+    logger.info(s"add: ${rootInterface.name}, deps-count: ${allDeps.length}, all:${rootInterface.versions.length},remain: ${remain.length}")
+    (subscriber, remain)
   }
 
   private def addRemainPackages(packages: Seq[PackageInfo]): Seq[PackageInfo] = {

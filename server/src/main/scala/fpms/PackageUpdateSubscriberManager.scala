@@ -52,7 +52,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
 
   def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, DepResult] =
     for {
-      m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))  
+      m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))
       v <- EitherT(m.getDependencies(version).map(_.toRight[PUSMError](PackageVersionNotFound)))
     } yield v
 

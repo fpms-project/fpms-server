@@ -25,7 +25,6 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       if(result._2.nonEmpty){
         remainList :+ result._2
       }
-      logger.info(s"add: ${v.name}")
     })
     var count = 0
     while ((list.nonEmpty || remainList.nonEmpty) && count < max) {
@@ -39,7 +38,6 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
         if(result._2.nonEmpty){
           remainList = remainList :+ result._2
         }
-        logger.info(s"add: ${v.name}, all: ${v.versions.length}, remain: ${result._2.length}")
       })
       remainList = remainList.map(e => {
         val result = addRemainPackages(e)
@@ -64,14 +62,14 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       result.value.map(_.left map { _ => packageInfo })
     }).map(_.unsafeRunSync())
     val allDeps = rootInterface.versions.flatMap(_.dep.fold(Seq.empty[String])(_.keys.toSeq)).distinct
-    allDeps.foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
+    allDeps.filter(_ != rootInterface.name).foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
     val mvar = MVar.of[IO, Seq[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }).unsafeRunSync()
     val alreadyS = MVar.of[IO, Seq[String]](allDeps).unsafeRunSync()
     val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()
     subscriber.start.unsafeRunAsyncAndForget()
     val remain = containers.collect { case Left(e) => e }
-    logger.info(s"add: ${rootInterface.name}, deps-count: ${allDeps.length}, all:${rootInterface.versions.length},remain: ${remain.length}")
+    logger.info(s"add: ${rootInterface.name}, deps-length: ${allDeps.length}, all:${rootInterface.versions.length},remain: ${remain.length}")
     (subscriber, remain)
   }
 

@@ -22,7 +22,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       val result = addPackageContainer_(v)
       packageUpdateSubscriberManager.addNewSubscriber(result._1).unsafeRunSync()
       already = already :+ v.name
-      if(result._2.nonEmpty){
+      if (result._2.nonEmpty) {
         remainList :+ result._2
       }
     })
@@ -35,7 +35,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
         val result = addPackageContainer_(v)
         packageUpdateSubscriberManager.addNewSubscriber(result._1).unsafeRunSync()
         already = already :+ v.name
-        if(result._2.nonEmpty){
+        if (result._2.nonEmpty) {
           remainList = remainList :+ result._2
         }
       })
@@ -63,7 +63,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     }).map(_.unsafeRunSync())
     val allDeps = rootInterface.versions.flatMap(_.dep.fold(Seq.empty[String])(_.keys.toSeq)).distinct
     allDeps.filter(_ != rootInterface.name).foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
-    val mvar = MVar.of[IO, Seq[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }).unsafeRunSync()
+    val mvar = MVar.of[IO, Set[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }.toSet).unsafeRunSync()
     val alreadyS = MVar.of[IO, Seq[String]](allDeps).unsafeRunSync()
     val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()

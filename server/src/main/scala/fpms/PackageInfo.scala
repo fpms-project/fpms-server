@@ -4,7 +4,12 @@ import com.gilt.gfc.semver.SemVer
 import io.circe.Decoder
 import io.circe.Encoder
 
-case class PackageInfo(name: String, version: SemVer, dep: Map[String, String])
+case class PackageInfo(name: String, version: SemVer, dep: Map[String, String]) {
+  override def equals(obj: Any): Boolean = obj match {
+    case d: PackageInfo => d.name == name && version == d.version
+    case _ => false
+  }
+}
 
 object PackageInfo {
 

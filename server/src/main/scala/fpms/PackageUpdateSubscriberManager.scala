@@ -93,7 +93,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
       for {
         queue <- Queue.bounded[F, PackageUpdateEvent](100)
         topic <- topicManager.addNewNamePackage(pack.name)
-        mv <- MVar.of[F, Seq[PackageDepsContainer[F]]](Seq.empty)
+        mv <- MVar.of[F, Set[PackageDepsContainer[F]]](Set.empty)
         already <- MVar.of[F, Seq[String]](Seq(pack.name))
       } yield Right(new PackageUpdateSubscriber[F](pack.name, mv, queue, topic, already))
     )

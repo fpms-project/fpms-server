@@ -9,6 +9,7 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
 ) {
 
   import VersionCondition._
+
   def dependencies: F[Seq[PackageInfo]] = for {
     mago <- depPackages.read.map(_.values.flatten[PackageInfo].toList)
   } yield mago :+ info
@@ -37,5 +38,10 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
       } yield true
       case _ => F.pure(false)
     }
+
+  override def equals(obj: Any): Boolean = obj match {
+    case p: PackageDepsContainer[F] => p.info == this.info
+    case _ => false
+  }
 }
 

@@ -50,6 +50,9 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
   } yield ()
 
+  def getMultiDependencies(request: Seq[RequestCondition]): EitherT[F, PUSMError, MultiPackageResult] =
+    
+
   def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, DepResult] =
     for {
       m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))
@@ -98,6 +101,10 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
       } yield Right(new PackageUpdateSubscriber[F](pack.name, mv, queue, topic, already))
     )
 }
+
+case class RequestCondition(name: String, condition: String)
+
+case class MultiPackageResult(packs: Seq[PackageInfo], deps: Map[String, PackageInfo])
 
 
 object PackageUpdateSubscriberManager {

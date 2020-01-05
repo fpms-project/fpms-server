@@ -64,7 +64,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     val allDeps = rootInterface.versions.flatMap(_.dep.fold(Seq.empty[String])(_.keys.toSeq)).distinct
     allDeps.filter(_ != rootInterface.name).foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
     val mvar = MVar.of[IO, Seq[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }).unsafeRunSync()
-    val alreadyS = MVar.of[IO, Seq[String]](allDeps).unsafeRunSync()
+    val alreadyS = MVar.of[IO, Set[String]](Set(allDeps:_*)).unsafeRunSync()
     val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()
     subscriber.start.unsafeRunAsyncAndForget()

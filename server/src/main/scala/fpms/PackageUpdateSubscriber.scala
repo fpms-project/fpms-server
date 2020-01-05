@@ -17,7 +17,7 @@ class PackageUpdateSubscriber[F[_]](
   containers: MVar[F, Seq[PackageDepsContainer[F]]],
   val queue: Queue[F, PackageUpdateEvent],
   topic: Topic[F, PackageUpdateEvent],
-  val alreadySubscribed: MVar[F, Seq[String]]
+  val alreadySubscribed: MVar[F, Set[String]]
 )(
   implicit F: ConcurrentEffect[F]
 ) {

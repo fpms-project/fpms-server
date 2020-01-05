@@ -25,21 +25,21 @@ object Main extends IOApp {
     // val jsonLoader = new JsonLoader(topicManager,manager)
     // jsonLoader.initialize()
     for {
-      _ <- manager.addNewPackage(PackageInfo("z", "1.0.0", Map.empty[String, String])).value
-      _ <- manager.addNewPackage(PackageInfo("y", "1.0.0", Map.empty[String, String])).value
-      _ <- manager.addNewPackage(PackageInfo("x", "1.0.0", Map.empty[String, String])).value
-      _ <- manager.addNewPackage(PackageInfo("f", "1.0.0", Map.empty[String, String])).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/z", "1.0.0", Map.empty[String, String])).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/y", "1.0.0", Map.empty[String, String])).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/x", "1.0.0", Map.empty[String, String])).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/f", "1.0.0", Map.empty[String, String])).value
       _ <- IO.sleep(1.seconds)
-      _ <- manager.addNewPackage(PackageInfo("w", "1.0.0", Map("x" -> "^1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("w", "1.1.0", Map("y" -> "^1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("e", "1.0.0", Map("f" -> "^1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("e", "1.1.0", Map("f" -> "^1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("d", "1.0.0", Map("w" -> "1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("c", "1.0.0", Map("z" -> "^1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("b", "1.0.0", Map("y" -> "^1.0.0"))).value
-      _ <- manager.addNewPackage(PackageInfo("a", "1.0.0", Map("e" -> "^1.0.0", "w" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/w", "1.0.0", Map("@fpms/x" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/w", "1.1.0", Map("@fpms/y" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/e", "1.0.0", Map("@fpms/f" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/e", "1.1.0", Map("@fpms/f" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/d", "1.0.0", Map("@fpms/w" -> "1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/c", "1.0.0", Map("@fpms/z" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/b", "1.0.0", Map("@fpms/y" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/a", "1.0.0", Map("@fpms/e" -> "^1.0.0", "@fpms/w" -> "^1.0.0"))).value
       _ <- IO.sleep(5.seconds)
-      _ <- manager.addNewPackage(PackageInfo("f", "1.1.0", Map("x" -> "^1.0.0"))).value
+      _ <- manager.addNewPackage(PackageInfo("@fpms/f", "1.1.0", Map("@fpms/x" -> "^1.0.0"))).value
       _ <- BlazeServerBuilder[IO].bindHttp(8080).withHttpApp(Server.server(manager)).serve.compile.drain
     } yield ExitCode.Success
   }
@@ -63,6 +63,8 @@ object Server {
   import io.circe.generic.auto._
   import org.http4s.circe.CirceEntityDecoder._
 
+  object PackageNamesMatcher extends OptionalMultiQueryParamDecoderMatcher[String]("name")
+
   def server(manager: PackageUpdateSubscriberManager[IO]) = HttpRoutes.of[IO] {
     case GET -> Root / "get_deps" / name / condition =>
       for {
@@ -74,9 +76,9 @@ object Server {
         les <- manager.countPackageNames().value
         resp <- Ok(toJson(les))
       } yield resp
-    case GET -> Root / "package" / name =>
+    case GET -> Root / "packages" :? PackageNamesMatcher(names) =>
       for {
-        les <- manager.getPackage(name).value
+        les <- manager.getPackages(names.getOrElse(List.empty)).value
         resp <- Ok(toJson(les))
       } yield resp
     case req@POST -> Root / "add_package" =>
@@ -84,6 +86,12 @@ object Server {
         pack <- req.as[PackageInfo]
         _ <- manager.addNewPackage(pack).value
         resp <- Ok(())
+      } yield resp
+    case req@POST -> Root / "get_deps" =>
+      for {
+        con <- req.as[Seq[RequestCondition]]
+        result <- manager.getMultiDependencies(con).value
+        resp <- Ok(toJson(result))
       } yield resp
   }.orNotFound
 

@@ -50,8 +50,16 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     _ <- EitherT.right(subscriber.addNewVersion(new PackageDepsContainer[F](pack, d, x)))
   } yield ()
 
-  def getMultiDependencies(request: Seq[RequestCondition]): EitherT[F, PUSMError, MultiPackageResult] =
-    
+  def getMultiDependencies(request: Seq[RequestCondition]): EitherT[F, PUSMError, MultiPackageResult] = {
+    if (request.isEmpty) {
+      EitherT.rightT(MultiPackageResult(Seq.empty, Map.empty))
+    } else
+      request.map(r => getDependencies(r.name, r.condition).toOption)
+        .toList.toNel.get
+        .parSequence
+        .map(l => MultiPackageResult(l.map(_.pack).toList, l.toList.map(e => (e.pack.name, e.deps)).toMap)).toRight(PackageNotFound)
+
+  }
 
   def getDependencies(name: String, version: VersionCondition): EitherT[F, PUSMError, DepResult] =
     for {
@@ -64,6 +72,16 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
       m <- EitherT(subsmap.read.map(_.get(name).toRight(PackageNotFound)))
       x <- EitherT.right(m.getAllVersion)
     } yield x
+
+  def getPackages(names: Seq[String]): EitherT[F, PUSMError, Map[String, Seq[PackageInfo]]] =
+    if (names.isEmpty) {
+      EitherT.rightT(Map.empty)
+    } else {
+      names.map(name => getPackage(name).toOption)
+        .toList.toNel.get
+        .parSequence
+        .map(_.toList.map(e => (e.head.name, e)).toMap).toRight(PackageNotFound)
+    }
 
   def countPackageNames(): EitherT[F, PUSMError, Int] = EitherT.right(subsmap.read.map(_.size))
 
@@ -104,7 +122,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
 
 case class RequestCondition(name: String, condition: String)
 
-case class MultiPackageResult(packs: Seq[PackageInfo], deps: Map[String, PackageInfo])
+case class MultiPackageResult(packs: Seq[PackageInfo], deps: Map[String, Seq[PackageInfo]])
 
 
 object PackageUpdateSubscriberManager {

@@ -63,6 +63,8 @@ object Server {
   import io.circe.generic.auto._
   import org.http4s.circe.CirceEntityDecoder._
 
+  object PackageNamesMatcher extends OptionalMultiQueryParamDecoderMatcher[String]("name")
+
   def server(manager: PackageUpdateSubscriberManager[IO]) = HttpRoutes.of[IO] {
     case GET -> Root / "get_deps" / name / condition =>
       for {
@@ -74,9 +76,9 @@ object Server {
         les <- manager.countPackageNames().value
         resp <- Ok(toJson(les))
       } yield resp
-    case GET -> Root / "package" / name =>
+    case GET -> Root / "packages" :? PackageNamesMatcher(names) =>
       for {
-        les <- manager.getPackage(name).value
+        les <- manager.getPackages(names.getOrElse(List.empty)).value
         resp <- Ok(toJson(les))
       } yield resp
     case req@POST -> Root / "add_package" =>
@@ -84,6 +86,12 @@ object Server {
         pack <- req.as[PackageInfo]
         _ <- manager.addNewPackage(pack).value
         resp <- Ok(())
+      } yield resp
+    case req@POST -> Root / "get_deps" =>
+      for {
+        con <- req.as[Seq[RequestCondition]]
+        result <- manager.getMultiDependencies(con).value
+        resp <- Ok(toJson(result))
       } yield resp
   }.orNotFound
 

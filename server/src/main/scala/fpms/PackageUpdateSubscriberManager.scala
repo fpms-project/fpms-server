@@ -41,7 +41,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     _ <- EitherT.rightT[F, Unit](pack.dep.keys.toSeq.foreach(d => f.toIO({
       subscriber.alreadySubscribed.take.flatMap(list => {
         if (!list.contains(d)) {
-          subscriber.alreadySubscribed.put(list :+ d).flatMap(_ => topicManager.subscribeTopic(d, subscriber.queue))
+          subscriber.alreadySubscribed.put(list + d).flatMap(_ => topicManager.subscribeTopic(d, subscriber.queue))
         } else {
           f.unit
         }
@@ -94,7 +94,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
         queue <- Queue.bounded[F, PackageUpdateEvent](100)
         topic <- topicManager.addNewNamePackage(pack.name)
         mv <- MVar.of[F, Set[PackageDepsContainer[F]]](Set.empty)
-        already <- MVar.of[F, Seq[String]](Seq(pack.name))
+        already <- MVar.of[F, Set[String]](Set(pack.name))
       } yield Right(new PackageUpdateSubscriber[F](pack.name, mv, queue, topic, already))
     )
 }

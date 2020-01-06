@@ -42,7 +42,13 @@ class PackageUpdateSubscriber[F[_]](
 
 
   def getDependencies(condition: VersionCondition): F[Option[DepResult]] =
-    getLatestVersion(condition).flatMap(_.fold(F.pure[Option[DepResult]](None))(e => e.dependencies.map(l => Some(DepResult(e.info, l)))))
+    getLatestVersion(condition).flatMap(_.fold(F.pure[Option[DepResult]](None))(e =>
+      for {
+        dep <- e.dependencies
+        info <- e.packdepInfo
+      } yield Some(DepResult(info, dep))
+    ))
+
 
   def getLatestVersion(condition: VersionCondition): F[Option[PackageDepsContainer[F]]] =
     containers.read.map(_.filter(e => condition.valid(e.info.version)).toSeq.sortWith((x, y) => x.info.version > y.info.version).headOption)
@@ -73,4 +79,4 @@ class PackageUpdateSubscriber[F[_]](
   }).compile.drain
 }
 
-case class DepResult(pack: PackageInfo, deps: Seq[PackageInfo])
+case class DepResult(pack: PackageDepInfo, deps: Seq[PackageDepInfo])

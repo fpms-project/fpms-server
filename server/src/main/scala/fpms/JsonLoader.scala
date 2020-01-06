@@ -57,7 +57,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
         latests <- packageUpdateSubscriberManager.getLatestsOfDeps(e.dep.getOrElse(Map.empty))
         maps <- packageUpdateSubscriberManager.calcuratePackageDependeincies(latests)
         d <- EitherT.right[Any](MVar.of[IO, Map[String, PackageInfo]](latests.mapValues(_.info)))
-        x <- EitherT.right[Any](MVar.of[IO, Map[String, Seq[PackageInfo]]](maps))
+        x <- EitherT.right[Any](MVar.of[IO, Map[String, Seq[PackageDepInfo]]](maps))
       } yield new PackageDepsContainer[IO](packageInfo, d, x)
       result.value.map(_.left map { _ => packageInfo })
     }).map(_.unsafeRunSync())

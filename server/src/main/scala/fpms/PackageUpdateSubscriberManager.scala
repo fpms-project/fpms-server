@@ -27,7 +27,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
     latest <- getLatestsOfDeps(pack.dep)
     deps <- calcuratePackageDependeincies(latest)
     d <- EitherT.right(MVar.of[F, Map[String, PackageInfo]](latest.mapValues(_.info)))
-    x <- EitherT.right(MVar.of[F, Map[String, Seq[PackageInfo]]](deps))
+    x <- EitherT.right(MVar.of[F, Map[String, Seq[PackageDepInfo]]](deps))
     mp <- EitherT.right(subsmap.read.map(_.get(pack.name)))
     subscriber <- mp.fold(
       for {
@@ -85,13 +85,13 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
 
   def countPackageNames(): EitherT[F, PUSMError, Int] = EitherT.right(subsmap.read.map(_.size))
 
-  def calcuratePackageDependeincies(latests: Map[String, PackageDepsContainer[F]]): EitherT[F, Nothing, Map[String, Seq[PackageInfo]]] =
+  def calcuratePackageDependeincies(latests: Map[String, PackageDepsContainer[F]]): EitherT[F, Nothing, Map[String, Seq[PackageDepInfo]]] =
     EitherT.right(
       latests.map(e => f.pure(e._1) product e._2.dependencies)
         .toList
         .toNel
         .map(_.parSequence.map(_.toList.toMap))
-        .getOrElse(f.pure(Map.empty[String, Seq[PackageInfo]]))
+        .getOrElse(f.pure(Map.empty[String, Seq[PackageDepInfo]]))
     )
 
   def getLatestsOfDeps(deps: Map[String, String]): EitherT[F, PUSMError, Map[String, PackageDepsContainer[F]]] = {
@@ -122,7 +122,7 @@ class PackageUpdateSubscriberManager[F[_] : ContextShift](
 
 case class RequestCondition(name: String, condition: String)
 
-case class MultiPackageResult(packs: Seq[PackageInfo], deps: Map[String, Seq[PackageInfo]])
+case class MultiPackageResult(packs: Seq[PackageDepInfo], deps: Map[String, Seq[PackageDepInfo]])
 
 
 object PackageUpdateSubscriberManager {

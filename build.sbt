@@ -16,9 +16,9 @@ lazy val client = (project in file("client")).settings(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
   scalacOptions := defaultscalacOptions
-).dependsOn(server)
+).dependsOn(root)
 
-lazy val server = (project in file("server")).settings(
+lazy val root = (project in file(".")).settings(
   name := "fpms",
   version := "0.1",
   scalaVersion := "2.12.10",
@@ -36,7 +36,8 @@ lazy val server = (project in file("server")).settings(
   ) ++ http4sDeps ++ CirceDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-  scalacOptions := defaultscalacOptions
+  scalacOptions := defaultscalacOptions,
+  javaOptions in Runtime += "-Dlog4j2.debug"
 )
 
 
@@ -63,4 +64,6 @@ lazy val defaultscalacOptions = Seq(
   "-feature",
   "-Ypartial-unification",
   "-Xfatal-warnings",
+  "log4j2.debug"
 )
+

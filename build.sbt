@@ -7,6 +7,8 @@ val Specs2Version = "4.1.0"
 
 val LogbackVersion = "1.2.3"
 
+val Redis4CatsVersion = "0.9.6"
+
 
 lazy val client = (project in file("client")).settings(
   name := "fmps-client",
@@ -33,7 +35,7 @@ lazy val root = (project in file(".")).settings(
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
     "co.fs2" %% "fs2-experimental" % "2.1.0",
     "dev.profunktor" %% "console4cats" % "0.8.0"
-  ) ++ http4sDeps ++ CirceDeps,
+  ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
   scalacOptions := defaultscalacOptions,
@@ -54,6 +56,22 @@ lazy val CirceDeps = Seq(
   "io.circe" %% "circe-generic-extras",
   "io.circe" %% "circe-parser"
 ).map(_  % CirceVersion)
+
+lazy val DoobieDeps = Seq(
+    // Start with this one
+    "org.tpolecat" %% "doobie-core"      % "0.8.8",
+
+    // And add any of these as needed
+    "org.tpolecat" %% "doobie-h2"        % "0.8.8",          // H2 driver 1.4.200 + type mappings.
+    "org.tpolecat" %% "doobie-hikari"    % "0.8.8",          // HikariCP transactor.
+    "org.tpolecat" %% "doobie-postgres"  % "0.8.8",          // Postgres driver 42.2.9 + type mappings.
+    "org.tpolecat" %% "doobie-quill"     % "0.8.8",          // Support for Quill 3.4.10
+)
+
+lazy val Redis4CatsDeps = Seq(
+  "dev.profunktor" %% "redis4cats-effects",
+  "dev.profunktor" %% "redis4cats-streams"
+).map(_ % Redis4CatsVersion)
 
 lazy val defaultscalacOptions = Seq(
   "-deprecation",

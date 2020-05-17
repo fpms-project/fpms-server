@@ -19,62 +19,86 @@ class PackageRegisterer[F[_]](
 
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
-    packs
-      .slice(0, 10000)
-      .map(v =>
-        registerPackage(v).handleError(e => {
-          logger.warn(
-            s"${v.name} package error: ${e.toString()} ${e.getStackTrace().mkString("\n")}"
+    for {
+      _ <-
+        packs
+          .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
+          .map(v =>
+            savePackage(v.name).handleError(e => {
+              logger.warn(
+                s"${v.name} package error: ${e.toString()} ${e.getStackTrace().mkString("\n")}"
+              )
+            })
           )
-        })
-      )
-      .toList
-      .toNel
-      .get
-      .parSequence_
+          .toList
+          .toNel
+          .get
+          .parSequence_
+      _ <-
+        packs
+          .map(v =>
+            savePackage(v.name).handleError(e => {
+              logger.warn(
+                s"${v.name} package error: ${e.toString()} ${e.getStackTrace().mkString("\n")}"
+              )
+            })
+          )
+          .toList
+          .toNel
+          .get
+          .parSequence_
+    } yield ()
+
   }
 
-  def registerPackage(info: RootInterface): F[Unit] = {
+  def savePackage(name: String): F[Unit] = {
     for {
       reg <- registering
-      contains <- reg.read.map(_ contains info.name)
+      contains <- reg.read.map(_ contains name)
       _ <-
         if (!contains) {
           for {
             s <- Semaphore[F](1)
             _ <- s.acquire
-            m <- reg.take.map(_.updated(info.name, s))
+            m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
-            //追加作業
-            _ <- F.pure(logger.info(s"start register package: ${info.name}"))
-            _ <- infoRepository.storeVersions(info.name, info.versions.map(_.version))
-            _ <-
-              if (info.versions.forall(p => !p.dep.exists(_.nonEmpty))) {
-                allDepRepository.storeMultiEmpty(
-                  info.versions.map(v => PackageInfoBase(info.name, v.version))
-                )
-              } else {
-                info.versions
-                  .map(v => registerPackageDeps(info.name, v))
-                  .toList
-                  .toNel
-                  .get
-                  .parSequence_
 
-              }
-            _ <- F.pure(logger.info(s"complete register package: ${info.name}"))
+            _ <- registerPackage(name)
             // modosu
             _ <- s.release
-            m <- reg.take.map(_.updated(info.name, s))
+            m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
           } yield ()
         } else {
           for {
             reg <- registering
-            v <- reg.read.map(_.get(info.name))
+            v <- reg.read.map(_.get(name))
             _ <- v.get.acquire
           } yield ()
         }
+    } yield ()
+  }
+
+  def registerPackage(name: String): F[Unit] = {
+    val info = packs.filter(_.name == name).head
+    for {
+      //追加作業
+      _ <- F.pure(logger.info(s"start register package: ${info.name}"))
+      _ <- infoRepository.storeVersions(info.name, info.versions.map(_.version))
+      _ <-
+        if (info.versions.forall(p => !p.dep.exists(_.nonEmpty))) {
+          allDepRepository.storeMultiEmpty(
+            info.versions.map(v => PackageInfoBase(info.name, v.version))
+          )
+        } else {
+          info.versions
+            .map(v => registerPackageDeps(info.name, v))
+            .toList
+            .toNel
+            .get
+            .parSequence_
+        }
+      _ <- F.pure(logger.info(s"complete register package: ${info.name}"))
     } yield ()
   }
 
@@ -85,14 +109,7 @@ class PackageRegisterer[F[_]](
         deps <- version.dep.fold(F.pure(Seq.empty[(String, String)]))(
           _.map(v =>
             for {
-              _ <- {
-                val t = packs.filter(_.name == v._1)
-                if (t.isEmpty) {
-                  throw new Error(s"${v._1} package not found")
-                } else {
-                  registerPackage(t.head)
-                }
-              }
+              _ <- savePackage(v._1)
               // get latest version from condition
               v <-
                 infoRepository

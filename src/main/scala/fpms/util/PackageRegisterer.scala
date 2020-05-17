@@ -38,8 +38,14 @@ class PackageRegisterer[F[_]](
       startedPackage = startedPackage.+(info.name)
       logger.info(s"start register package: ${info.name}")
       for {
+        reg <- registering
+        newMvar <- MVar.of[F, Unit](())
+        _ <- newMvar.take
+        newReg <- reg.take.map(_.updated(info.name, newMvar))
+        _ <- reg.put(newReg)
         _ <- infoRepository.storeVersions(info.name, info.versions.map(_.version))
         _ <- info.versions.map(v => registerPackageDeps(info.name, v)).toList.toNel.get.parSequence
+        _ <- newMvar.put(())
         _ <- F.pure(logger.info(s"complete register package: ${info.name}"))
       } yield ()
     } else {
@@ -74,13 +80,7 @@ class PackageRegisterer[F[_]](
                       } yield ()
                     } else {
                       for {
-                        reg <- registering
-                        newMvar <- MVar.of[F, Unit](())
-                        _ <- newMvar.take
-                        newReg <- reg.take.map(_.updated(v._1, newMvar))
-                        _ <- reg.put(newReg)
                         _ <- registerPackage(packs.filter(_.name == v._1).head)
-                        _ <- newMvar.put(())
                       } yield ()
                     }
                 } yield ()

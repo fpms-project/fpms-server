@@ -18,4 +18,11 @@ class PackageAllDepMemoryRepository[F[_]](m: MVar[F, Map[PackageInfoBase, Seq[Pa
       _ <- m.put(x)
     } yield ()
   }
+
+  override def storeMultiEmpty(b: Seq[PackageInfoBase]): F[Unit] = {
+    for {
+      x <- m.take.map(_ ++ b.map((_, Seq.empty)).toMap)
+      _ <- m.put(x)
+    } yield ()
+  }
 }

@@ -6,5 +6,7 @@ trait PackageAllDepRepository[F[_]] {
       deps: Seq[PackageInfoBase]
   ): F[Unit]
 
+  def storeMultiEmpty(b: Seq[PackageInfoBase]): F[Unit]
+
   def get(pack: PackageInfoBase): F[Option[Seq[PackageInfoBase]]]
 }

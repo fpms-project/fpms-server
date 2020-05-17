@@ -19,4 +19,15 @@ class PackageDepRelationMemoryRepository[F[_]](m: MVar[F, Map[String, Seq[Packag
 
   override def get(name: String): F[Option[Seq[PackageInfoBase]]] =
     m.read.map(_.get(name))
+
+  override def addMulti(target: Seq[(String, PackageInfoBase)]): F[Unit] = {
+    for {
+      v <- m.take.map(v =>
+        target
+          .map(x => (x._1, v.getOrElse(x._1, Seq.empty) :+ x._2))
+          .toMap[String, Seq[PackageInfoBase]] ++ v
+      )
+      _ <- m.put(v)
+    } yield ()
+  }
 }

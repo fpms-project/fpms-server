@@ -2,10 +2,10 @@ package fpms
 
 case class RootInterface (
   name: String,
-  versions: Seq[Versions]
+  versions: Seq[NpmPackageVersion]
 )
 
-case class Versions (
+case class NpmPackageVersion (
   version: String,
   dep: Option[Map[String, String]]
 )

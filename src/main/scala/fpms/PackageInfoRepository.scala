@@ -1,18 +1,16 @@
 package fpms
 
-import com.gilt.gfc.semver.SemVer
-
 trait PackageInfoRepository[F[_]] {
+  def store(info: PackageInfo): F[Unit]
 
-  import PackageInfoRepository._
+  def storeVersions(name: String, versions: Seq[String]): F[Unit]
 
-  def store(info: PackageInfo): F[Either[PackageInfoRepositoryError, ()]]
+  def get(name: String, version: String): F[Option[PackageInfo]]
 
-  def get(name: String, version: SemVer): F[Either[PackageInfoRepositoryError, PackageInfo]]
+  def getVersions(name: String): F[Option[Seq[String]]]
 
-  def getVersions(name: String): F[Either[PackageInfoRepositoryError, Seq[SemVer]]]
+  def has(name: String): F[Boolean]
 
-  def storeVersions(name: String, versions: Seq[SemVer]): F[Either[PackageInfoRepositoryError, ()]]
 }
 
 object PackageInfoRepository {

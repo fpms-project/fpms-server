@@ -16,7 +16,7 @@ class PackageRegisterer[F[_]](
 )(implicit F: ConcurrentEffect[F], P: Parallel[F]) {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val registering = MVar.of[F, Map[String, MVar[F, Unit]]](Map.empty)
+  private val registering = MVar.of[F, Map[String, MVar[F, Boolean]]](Map.empty)
   private var startedPackage: Set[String] = Set.empty[String]
 
   import PackageRegisterer._
@@ -24,7 +24,9 @@ class PackageRegisterer[F[_]](
     packs
       .map(v =>
         registerPackage(v).handleError(e => {
-          logger.warn(s"${v.name} error: ${e.getStackTrace().mkString("\n")}")
+          logger.warn(
+            s"${v.name} package error: ${e.toString()} ${e.getStackTrace().mkString("\n")}"
+          )
         })
       )
       .toList
@@ -34,28 +36,35 @@ class PackageRegisterer[F[_]](
   }
 
   def registerPackage(info: RootInterface): F[Unit] = {
-    if (!startedPackage.contains(info.name)) {
-      startedPackage = startedPackage.+(info.name)
-      logger.info(s"start register package: ${info.name}")
-      for {
-        reg <- registering
-        newMvar <- MVar.of[F, Unit](())
-        _ <- newMvar.take
-        newReg <- reg.take.map(_.updated(info.name, newMvar))
-        _ <- reg.put(newReg)
-        _ <- infoRepository.storeVersions(info.name, info.versions.map(_.version))
-        _ <- info.versions.map(v => registerPackageDeps(info.name, v)).toList.toNel.get.parSequence
-        _ <- newMvar.put(())
-        _ <- F.pure(logger.info(s"complete register package: ${info.name}"))
-      } yield ()
-    } else {
-      for {
-        reg <- registering
-        targetMvar <- reg.read.map(_.get(info.name))
-        _ <- targetMvar.get.read
-      } yield ()
-    }
-
+    for {
+      reg <- registering
+      contains <- reg.read.map(_ contains info.name)
+      _ <-
+        if (!contains) {
+          for {
+            mva <- MVar.of[F, Boolean](false)
+            _ <- mva.take
+            m <- reg.take.map(_.updated(info.name, mva))
+            _ <- reg.put(m)
+            //追加作業
+            _ <- F.pure(logger.info(s"start register package: ${info.name}"))
+            _ <- infoRepository.storeVersions(info.name, info.versions.map(_.version))
+            _ <-
+              info.versions.map(v => registerPackageDeps(info.name, v)).toList.toNel.get.parSequence
+            _ <- F.pure(logger.info(s"complete register package: ${info.name}"))
+            // modosu
+            _ <- mva.put(true)
+            m <- reg.take.map(_.updated(info.name, mva))
+            _ <- reg.put(m)
+          } yield ()
+        } else {
+          for {
+            reg <- registering
+            v <- reg.read.map(_.get(info.name))
+            _ <- v.get.read
+          } yield ()
+        }
+    } yield ()
   }
 
   def registerPackageDeps(name: String, version: NpmPackageVersion): F[Unit] = {
@@ -64,27 +73,15 @@ class PackageRegisterer[F[_]](
       deps <- version.dep.fold(F.pure(Seq.empty[(String, String)]))(
         _.map(v =>
           for {
-            b <- infoRepository.has(v._1)
-            // register package if package not registered
-            _ <-
-              if (!b) {
-                for {
-                  x <- registering.flatMap(_.read.map(se => se contains v._1))
-                  _ <-
-                    if (x) {
-                      // wait for put
-                      for {
-                        reg <- registering
-                        targetMvar <- reg.read.map(_.get(v._1))
-                        _ <- targetMvar.get.read
-                      } yield ()
-                    } else {
-                      for {
-                        _ <- registerPackage(packs.filter(_.name == v._1).head)
-                      } yield ()
-                    }
-                } yield ()
-              } else F.unit
+            _ <- {
+              val t = packs.filter(_.name == v._1)
+              if (t.isEmpty) {
+                throw new Error(s"${v._1} package not found")
+              } else {
+                registerPackage(t.head)
+              }
+
+            }
             // get latest version from condition
             v <-
               infoRepository

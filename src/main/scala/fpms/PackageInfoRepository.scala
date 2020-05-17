@@ -11,6 +11,8 @@ trait PackageInfoRepository[F[_]] {
   def get(name: String, version: SemVer): F[Either[PackageInfoRepositoryError, PackageInfo]]
 
   def getVersions(name: String): F[Either[PackageInfoRepositoryError, Seq[SemVer]]]
+
+  def storeVersions(name: String, versions: Seq[SemVer]): F[Either[PackageInfoRepositoryError, ()]]
 }
 
 object PackageInfoRepository {

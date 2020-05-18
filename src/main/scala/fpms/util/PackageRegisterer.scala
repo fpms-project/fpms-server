@@ -20,10 +20,12 @@ class PackageRegisterer[F[_]](
 
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
+
     val packs_nodep = packs
       .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
     val packs_dep = packs
       .filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
+    assert(packs_dep.length + packs_nodep.length == packs.length, "pack length check")
     for {
       _ <-
         packs_nodep
@@ -63,17 +65,20 @@ class PackageRegisterer[F[_]](
       _ <-
         if (!contains) {
           for {
+            // パッケージ名でのロック
             s <- Semaphore[F](1)
             _ <- s.acquire
             m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
+            // 親パッケージは16までに制限
             _ <- if (fromParent) F.unit else semaphore.acquire
             _ <- registerPackage(name)
             // modosu
-            _ <- if (fromParent) F.unit else s.release
+            _ <- s.release
             m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
-            _ <- semaphore.release
+            // 親パッケージのやつが終わったら開放
+            _ <- if (fromParent) F.unit else semaphore.release
           } yield ()
         } else {
           for {

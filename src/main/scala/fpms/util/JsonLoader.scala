@@ -29,7 +29,7 @@ object JsonLoader {
   }
 
   private def filepath(count: Int): String =
-    s"/home/sh4869/Projects/package-manager-server/jsons/$count.json"
+    s"/home/al16030/Repos/package-manager-server/jsons/$count.json"
 
   private def readFile(filename: String): String = {
     val source = Source.fromFile(filename)

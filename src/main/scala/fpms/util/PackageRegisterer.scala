@@ -64,12 +64,11 @@ class PackageRegisterer[F[_]](
       contains <- reg.read.map(_ contains name)
       _ <-
         if (!contains) {
+          val s = F.toIO(Semaphore[F](1)).unsafeRunSync()
+          F.toIO(s.acquire).unsafeRunSync()
+          val m = F.toIO(reg.take.map(_.updated(name, s))).unsafeRunSync()
+          F.toIO(reg.put(m)).unsafeRunSync()
           for {
-            // パッケージ名でのロック
-            s <- Semaphore[F](1)
-            _ <- s.acquire
-            m <- reg.take.map(_.updated(name, s))
-            _ <- reg.put(m)
             // 親パッケージは16までに制限
             _ <- if (fromParent) F.unit else semaphore.acquire
             _ <- registerPackage(name)
@@ -85,6 +84,7 @@ class PackageRegisterer[F[_]](
             reg <- registering
             v <- reg.read.map(_.get(name))
             _ <- v.get.acquire
+            _ <- v.get.release
           } yield ()
         }
     } yield ()

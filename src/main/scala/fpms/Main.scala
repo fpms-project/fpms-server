@@ -16,7 +16,7 @@ object Main extends IOApp {
     logger.info("json loaded!")
     for {
       repos <- getRepositories()
-      s <- Semaphore[IO](16)
+      s <- Semaphore[IO](14)
       _ <- new PackageRegisterer[IO](repos._1, repos._2, repos._3, s, packs).registerPackages()
     } yield ExitCode.Success
   }

@@ -11,6 +11,7 @@ class PackageRegisterer[F[_]](
     infoRepository: PackageInfoRepository[F],
     depRelationRepository: PackageDepRelationRepository[F],
     allDepRepository: PackageAllDepRepository[F],
+    semaphore: Semaphore[F],
     var packs: Seq[RootInterface]
 )(implicit F: ConcurrentEffect[F], P: Parallel[F]) {
 
@@ -34,6 +35,7 @@ class PackageRegisterer[F[_]](
           .toNel
           .get
           .parSequence_
+      _ <- F.pure(logger.info("added simple packages"))
       _ <-
         packs
           .map(v =>
@@ -62,12 +64,13 @@ class PackageRegisterer[F[_]](
             _ <- s.acquire
             m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
-
+            _ <- semaphore.acquire
             _ <- registerPackage(name)
             // modosu
             _ <- s.release
             m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
+            _ <- semaphore.release
           } yield ()
         } else {
           for {

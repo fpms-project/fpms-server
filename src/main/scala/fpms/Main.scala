@@ -1,6 +1,7 @@
 package fpms
 
 import cats.effect.concurrent.MVar
+import cats.effect.concurrent.Semaphore
 import cats.effect.{IOApp, _}
 import fpms.repository.memory.{PackageAllDepMemoryRepository, PackageDepRelationMemoryRepository}
 import fpms.repository.memoryexception.PackageInfoMemoryRepository
@@ -15,7 +16,8 @@ object Main extends IOApp {
     logger.info("json loaded!")
     for {
       repos <- getRepositories()
-      _ <- new PackageRegisterer[IO](repos._1, repos._2, repos._3, packs).registerPackages()
+      s <- Semaphore[IO](16)
+      _ <- new PackageRegisterer[IO](repos._1, repos._2, repos._3, s, packs).registerPackages()
     } yield ExitCode.Success
   }
 

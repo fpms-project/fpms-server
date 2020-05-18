@@ -20,10 +20,13 @@ class PackageRegisterer[F[_]](
 
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
+    val packs_nodep = packs
+      .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
+    val packs_dep = packs
+      .filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
     for {
       _ <-
-        packs
-          .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
+        packs_nodep
           .map(v =>
             savePackage(v.name).handleError(e => {
               logger.warn(
@@ -37,7 +40,7 @@ class PackageRegisterer[F[_]](
           .parSequence_
       _ <- F.pure(logger.info("added simple packages"))
       _ <-
-        packs
+        packs_dep
           .map(v =>
             savePackage(v.name).handleError(e => {
               logger.warn(
@@ -53,7 +56,7 @@ class PackageRegisterer[F[_]](
 
   }
 
-  def savePackage(name: String): F[Unit] = {
+  def savePackage(name: String, fromParent: Boolean = false): F[Unit] = {
     for {
       reg <- registering
       contains <- reg.read.map(_ contains name)
@@ -64,10 +67,10 @@ class PackageRegisterer[F[_]](
             _ <- s.acquire
             m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
-            _ <- semaphore.acquire
+            _ <- if (fromParent) F.unit else semaphore.acquire
             _ <- registerPackage(name)
             // modosu
-            _ <- s.release
+            _ <- if (fromParent) F.unit else s.release
             m <- reg.take.map(_.updated(name, s))
             _ <- reg.put(m)
             _ <- semaphore.release
@@ -112,7 +115,7 @@ class PackageRegisterer[F[_]](
         deps <- version.dep.fold(F.pure(Seq.empty[(String, String)]))(
           _.map(v =>
             for {
-              _ <- savePackage(v._1)
+              _ <- savePackage(v._1, true)
               // get latest version from condition
               v <-
                 infoRepository

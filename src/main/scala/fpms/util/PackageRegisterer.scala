@@ -12,11 +12,11 @@ class PackageRegisterer[F[_]](
     depRelationRepository: PackageDepRelationRepository[F],
     allDepRepository: PackageAllDepRepository[F],
     semaphore: Semaphore[F],
+    mv: MVar[F, Map[String, Semaphore[F]]],
     var packs: Seq[RootInterface]
 )(implicit F: ConcurrentEffect[F], P: Parallel[F]) {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val registering = MVar.of[F, Map[String, Semaphore[F]]](Map.empty)
 
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
@@ -32,7 +32,7 @@ class PackageRegisterer[F[_]](
           .map(v =>
             savePackage(v.name).handleError(e => {
               logger.warn(
-                s"${v.name} package error: ${e.toString()} ${e.getStackTrace().mkString("\n")}"
+                s"${v.name} package error: ${e.toString()}"
               )
             })
           )
@@ -46,7 +46,7 @@ class PackageRegisterer[F[_]](
           .map(v =>
             savePackage(v.name).handleError(e => {
               logger.warn(
-                s"${v.name} package error: ${e.toString()} ${e.getStackTrace().mkString("\n")}"
+                s"${v.name} package error: ${e.toString()}"
               )
             })
           )
@@ -60,29 +60,27 @@ class PackageRegisterer[F[_]](
 
   def savePackage(name: String, fromParent: Boolean = false): F[Unit] = {
     for {
-      reg <- registering
-      contains <- reg.read.map(_ contains name)
+      mvv <- mv.take
       _ <-
-        if (!contains) {
-          val s = F.toIO(Semaphore[F](1)).unsafeRunSync()
-          F.toIO(s.acquire).unsafeRunSync()
-          val m = F.toIO(reg.take.map(_.updated(name, s))).unsafeRunSync()
-          F.toIO(reg.put(m)).unsafeRunSync()
+        if (!(mvv contains name)) {
           for {
+            s <- Semaphore[F](1)
+            _ <- s.acquire
+            _ <- mv.put(mvv.updated(name, s))
             // 親パッケージは16までに制限
             _ <- if (fromParent) F.unit else semaphore.acquire
             _ <- registerPackage(name)
             // modosu
             _ <- s.release
-            m <- reg.take.map(_.updated(name, s))
-            _ <- reg.put(m)
+//            m <- mv.take.map(_.updated(name, s))
+//            _ <- mv.put(m)
             // 親パッケージのやつが終わったら開放
             _ <- if (fromParent) F.unit else semaphore.release
           } yield ()
         } else {
           for {
-            reg <- registering
-            v <- reg.read.map(_.get(name))
+            _ <- mv.put(mvv)
+            v <- mv.read.map(_.get(name))
             _ <- v.get.acquire
             _ <- v.get.release
           } yield ()

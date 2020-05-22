@@ -6,8 +6,8 @@ import scala.util.Try
 object VersionCondition {
 
   implicit class VersionCondition(val src: String) {
-    def valid(ver: SemVer): Boolean = Try{semver.SemVer.satisfies(ver.original, src)}.getOrElse(false)
+    def valid(ver: SemVer): Boolean =
+      Try { semver.SemVer.satisfies(ver.original, src) }.getOrElse(false)
   }
 
 }
-

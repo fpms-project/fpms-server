@@ -4,8 +4,10 @@ import fpms.RootInterface
 import io.circe.generic.auto._
 import io.circe.parser.decode
 import org.slf4j.LoggerFactory
-
+import java.nio.charset.StandardCharsets
+import java.net.URLEncoder
 import scala.io.Source
+import java.net.URLDecoder
 
 object JsonLoader {
 
@@ -14,6 +16,7 @@ object JsonLoader {
 
   def createLists(count: Int = MAX_FILE_COUNT): Seq[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
+    val charset = StandardCharsets.UTF_8.name
     for (i <- 0 to count) {
       val src = readFile(filepath(i))
       val dec = decode[List[RootInterface]](src) match {
@@ -23,7 +26,7 @@ object JsonLoader {
           None
         }
       }
-      lists = lists :+ dec
+      lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, charset))))
     }
     lists.flatten.flatten[RootInterface]
   }

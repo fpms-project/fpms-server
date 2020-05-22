@@ -27,3 +27,6 @@ null/
 
 jsons/*
 !jsons/.gitkeep
+
+.metals/
+.bloop/

@@ -4,15 +4,18 @@ import cats.implicits._
 import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
 import fpms.{PackageAllDepRepository, PackageInfoBase}
+import fpms.PackageInfo
 
-class PackageAllDepMemoryRepository[F[_]](m: MVar[F, Map[PackageInfoBase, Seq[PackageInfoBase]]])(
-    implicit F: ConcurrentEffect[F]
+class PackageAllDepMemoryRepository[F[_]](
+    m: MVar[F, Map[PackageInfoBase, Map[String, Seq[PackageInfoBase]]]]
+)(implicit
+    F: ConcurrentEffect[F]
 ) extends PackageAllDepRepository[F] {
-  override def get(pack: PackageInfoBase): F[Option[Seq[PackageInfoBase]]] = {
-    m.read.map(_.get(pack))
+  override def get(name: String, version: String): F[Option[Map[String, Seq[PackageInfoBase]]]] = {
+    m.read.map(_.get(PackageInfoBase(name, version)))
   }
 
-  override def store(pack: PackageInfoBase, deps: Seq[PackageInfoBase]): F[Unit] = {
+  override def store(pack: PackageInfoBase, deps: Map[String, Seq[PackageInfoBase]]): F[Unit] = {
     for {
       x <- m.take.map(_.updated(pack, deps))
       _ <- m.put(x)
@@ -21,7 +24,7 @@ class PackageAllDepMemoryRepository[F[_]](m: MVar[F, Map[PackageInfoBase, Seq[Pa
 
   override def storeMultiEmpty(b: Seq[PackageInfoBase]): F[Unit] = {
     for {
-      x <- m.take.map(_ ++ b.map((_, Seq.empty)).toMap)
+      x <- m.take.map(_ ++ b.map((_, Map.empty[String, Seq[PackageInfoBase]])).toMap)
       _ <- m.put(x)
     } yield ()
   }

@@ -12,7 +12,7 @@ import java.net.URLEncoder
 class PackageRegisterer[F[_]](
     infoRepository: PackageInfoRepository[F],
     depRelationRepository: PackageDepRelationRepository[F],
-    allDepRepository: PackageAllDepRepository[F],
+    alldepRepo: PackageAllDepRepository[F],
     var packs: Seq[RootInterface]
 )(implicit F: ConcurrentEffect[F], P: Parallel[F]) {
   val SEMAPHORE_COUNT = Runtime.getRuntime().availableProcessors() * 2
@@ -20,6 +20,8 @@ class PackageRegisterer[F[_]](
   private val digdepSemaphore = F.toIO(Semaphore[F](1)).unsafeRunSync()
   private val semaphore = F.toIO(Semaphore[F](SEMAPHORE_COUNT)).unsafeRunSync()
   private val mv = F.toIO(MVar.of[F, Map[String, MVar[F, Boolean]]](Map.empty)).unsafeRunSync()
+  private val registerStopper =
+    F.toIO(MVar.of[F, Map[String, MVar[F, Boolean]]](Map.empty)).unsafeRunSync()
 
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
@@ -28,19 +30,46 @@ class PackageRegisterer[F[_]](
       .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
     val packs_dep = packs
       .filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
-    assert(packs_dep.length + packs_nodep.length == packs.length, "pack length check")
     for {
+      // パッケージのすべての基本情報を保存
+      _ <-
+        packs
+          .map(v =>
+            if (v.versions.nonEmpty) {
+              for {
+                _ <- infoRepository.storeVersions(v.name, v.versions.map(_.version))
+                _ <-
+                  v.versions
+                    .map(x =>
+                      infoRepository.store(
+                        PackageInfo(v.name, x.version, x.dep.getOrElse(Map.empty))
+                      )
+                    )
+                    .toList
+                    .toNel
+                    .get
+                    .parSequence_
+              } yield ()
+            } else {
+              // ないことがあるらしい……。
+              F.unit
+            }
+          )
+          .toList
+          .toNel
+          .get
+          .parSequence_
+      _ <- F.pure(logger.info("added all package version"))
+      // 一つも依存関係がないバージョンしかないパッケージについて依存関係を保存
       _ <-
         packs_nodep
           .map(v =>
             for {
               _ <- semaphore.acquire
-              _ <- savePackage(v.name).handleError(e => {
-                logger.warn(
-                  s"${v.name} package error: ${e.toString()}"
-                )
-                false
-              })
+              _ <- alldepRepo.storeMultiEmpty(
+                v.versions.map(x => PackageInfoBase(v.name, x.version))
+              )
+              _ <- F.pure(logger.info(s"${v.name} added_simple_package"))
               _ <- semaphore.release
             } yield ()
           )
@@ -52,12 +81,14 @@ class PackageRegisterer[F[_]](
       _ <- semaphore.acquireN(SEMAPHORE_COUNT / 2)
       _ <-
         packs_dep
+          .map(x => x.versions.map(ver => (x.name, ver.version)))
+          .flatten
           .map(v =>
             for {
               _ <- semaphore.acquire
-              _ <- savePackage(v.name).handleError(e => {
+              _ <- savePackageDeps(v._1, v._2).handleError(e => {
                 logger.warn(
-                  s"${v.name} package error: ${e.toString()}"
+                  s"${v._1} ${v._2} package error: ${e.toString()}"
                 )
                 false
               })
@@ -68,136 +99,83 @@ class PackageRegisterer[F[_]](
           .toNel
           .get
           .parSequence_
+      _ <- F.pure(logger.info("Completed!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"))
     } yield ()
   }
 
-  def savePackage(name: String, fromParent: Boolean = false): F[Boolean] = {
+  def savePackageDeps(name: String, version: String): F[Boolean] = {
+    val target = PackageInfoBase(name, version)
     for {
-      mvv <- mv.take
-      _ <- F.pure(logger.info(s"$name save_package_start"))
+      stopper <- registerStopper.take
+       _ <- F.pure(logger.info(s"$name $version save_package_deps_start"))
       result <-
-        if (!(mvv contains name)) {
+        if (!(stopper contains target.toString())) {
           for {
-            _ <- F.pure(
-              logger.info(
-                s"$name save_package_run : ${if (fromParent) "fromParent" else "fromRegister"}"
-              )
-            )
-            v <- MVar.of[F, Boolean](false)
-            _ <- v.take
-            _ <- mv.put(mvv.updated(name, v))
-            x <- registerPackage(name, fromParent).handleError(v => false)
-            // modosu
-            _ <- v.put(true)
-            m <- mv.take.map(_.updated(name, v))
-            _ <- mv.put(m)
-          } yield x
+            stop <- MVar.of[F, Boolean](false)
+            _ <- stop.take
+            _ <- registerStopper.put(stopper.updated(target.toString(), stop))
+            result <- savePackageDepsInternal(name, version)
+            _ <- stop.put(result)
+          } yield result
         } else {
           for {
-            _ <- mv.put(mvv)
-            v <- mv.read.map(_.get(name))
-            x <- v.get.read
-          } yield x
+            _ <- registerStopper.put(stopper)
+            stop <- registerStopper.read.map(_.get(target.toString()))
+            result <- stop.get.read
+          } yield result
         }
     } yield result
   }
 
-  // パッケージそのものが見つからない場合はFalse
-  // パッケージが一つでも見つかっている場合はTrue
-  def registerPackage(name: String, fromParent: Boolean): F[Boolean] = {
-    // TODO: 本当はinfoRepositoryに追加するのは依存関係が計算できたやつだけ
-    packs.filter(_.name == name).headOption.fold(F.pure(false)) { info =>
-      for {
-        //追加作業
-        _ <- F.pure(logger.info(s"start register package: ${info.name}"))
-        _ <- infoRepository.storeVersions(info.name, info.versions.map(_.version))
-        _ <-
-          if (info.versions.forall(p => !p.dep.exists(_.nonEmpty))) {
-            allDepRepository.storeMultiEmpty(
-              info.versions.map(v => PackageInfoBase(info.name, v.version))
-            )
-          } else {
-            info.versions
-              .map(v => registerPackageDeps(info.name, v, fromParent).handleError(e => false))
-              .toList
-              .toNel
-              .get
-              .parSequence_
-          }
-        _ <- F.pure(logger.info(s"complete register package: ${info.name}"))
-      } yield true
-    }
+  def savePackageDepsInternal(name: String, version: String): F[Boolean] = {
+    val target = PackageInfoBase(name, version)
+    logger.info(s"$name $version dep_calc_start")
+    infoRepository
+      .get(name, version)
+      .flatMap(v =>
+        // そもそもinfoに追加されてなかったらfalse
+        v.fold(F.pure(false))(x => {
+          val func = for {
+            // すべての適応する最新版を取得
+            v <-
+              x.dep
+                .map(d => infoRepository.getVersions(d._1).map(z => (d._1, latest(z, d._2))))
+                .toList
+                .toNel
+                .fold(F.pure(Seq.empty[(String, String)]))(y => y.parSequence.map(_.toList))
+            // それぞれの最新版についてそのすべての依存関係を取得
+            z <-
+              v.map(x =>
+                  alldepRepo
+                    .get(x._1, x._2)
+                    .flatMap(_.fold({
+                      // 追加されていなかった場合registerPackageを呼んでからallDepRepoに保存されているものを呼ぶ
+                      // もしだめだったらFalseが却ってくるのでその時点で例外を投げる
+                      for {
+                        v <- savePackageDeps(x._1, x._2)
+                        result <-
+                          if (v) alldepRepo.get(x._1, x._2).map(_.get)
+                          else throw new Error("dep not found!!!!")
+                      } yield (x._1, result.values.flatten[PackageInfoBase].toList)
+                    })(depmap => F.pure((x._1, depmap.values.flatten[PackageInfoBase].toList))))
+                )
+                .toList
+                .toNel
+                .fold(F.pure(Map.empty[String, Seq[PackageInfoBase]]))(_.parSequence
+                .map(_.toList.toMap))
+            // すべての依存を追加
+            _ <- alldepRepo.store(target, z)
+            // 依存関係を追加
+            _ <- depRelationRepository.addMulti(v.map(a => (a._1, target)))
+            _ <- F.pure(logger.info(s"$name $version dep_calc_complete"))
+          } yield true
+          func.handleError(e => {
+            logger.info(s"$name $version registor_failed | error: ${e.toString()}")
+            false
+          })
+        })
+      )
   }
-
-  def registerPackageDeps(
-      name: String,
-      version: NpmPackageVersion,
-      fromParent: Boolean
-  ): F[Boolean] = {
-    val target = PackageInfoBase(name, version.version)
-    if (version.dep.forall(_.isEmpty)) {
-      for {
-        _ <- F.pure(logger.info(s"$name ${version.version} version_start (nodep)"))
-        _ <- allDepRepository.store(target, Seq.empty)
-        _ <- F.pure(logger.info(s"$name ${version.version} version_complete (nodep)"))
-      } yield true
-    } else {
-      for {
-        _ <- F.pure(logger.info(s"$name ${version.version} version_start"))
-        deps <- version.dep.fold(F.pure(Seq.empty[(String, String)]))(
-          _.map(v => {
-            val f: F[Option[(String, String)]] = for {
-              r <- savePackage(v._1, true)
-              _ <- if (r) F.unit else { throw new Error("!!!!") }
-              v <-
-                infoRepository
-                  .getVersions(v._1)
-                  .map(vers =>
-                    (
-                      v._1,
-                      latest(vers, v._2)
-                    )
-                  )
-            } yield Some(v)
-            f.handleError(_ => None)
-          }).toList.toNel.fold(F.pure(Seq.empty[(String, String)]))(v =>
-            v.parSequence.map(_.toList.flatten)
-          )
-        )
-        result <-
-          if (deps.length == version.dep.fold(0)(v => v.size)) {
-            for {
-              _ <- F.pure(logger.info(s"$name ${version.version} version_dep_calculate_success"))
-              _ <- depRelationRepository.addMulti(
-                deps
-                  .map(v => (v._1, target))
-              )
-              // get all deps
-              allDeps <-
-                deps
-                  .map(v => allDepRepository.get(PackageInfoBase(v._1, v._2)))
-                  .toList
-                  .toNel
-                  .fold(F.pure(Seq.empty[PackageInfoBase]))(v =>
-                    v.parSequence
-                      .map(v =>
-                        v.map[Seq[PackageInfoBase]](v => v.getOrElse(Seq.empty[PackageInfoBase]))
-                          .toList
-                          .flatten[PackageInfoBase]
-                      )
-                  )
-              // save to repository
-              _ <- allDepRepository.store(target, allDeps)
-              _ <- F.pure(logger.info(s"$name ${version.version} version_complete"))
-            } yield true
-          } else {
-            F.pure(logger.info(s"$name ${version.version} version_failed")).map(_ => false)
-          }
-      } yield result
-    }
-
-  }
-
 }
 
 object PackageRegisterer {

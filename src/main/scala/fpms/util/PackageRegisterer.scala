@@ -1,5 +1,9 @@
 package fpms
 
+import cats.effect.{ContextShift, Timer}
+import scala.concurrent.CancellationException
+import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.duration._
 import cats.Parallel
 import cats.effect.ConcurrentEffect
 import cats.implicits._
@@ -14,14 +18,15 @@ class PackageRegisterer[F[_]](
     depRelationRepository: PackageDepRelationRepository[F],
     alldepRepo: PackageAllDepRepository[F],
     var packs: Seq[RootInterface]
-)(implicit F: ConcurrentEffect[F], P: Parallel[F]) {
-  val SEMAPHORE_COUNT = Runtime.getRuntime().availableProcessors() * 2
+)(implicit F: ConcurrentEffect[F], P: Parallel[F], timer: Timer[F], cs: ContextShift[F]) {
+  val SEMAPHORE_COUNT = Runtime.getRuntime().availableProcessors()
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val digdepSemaphore = F.toIO(Semaphore[F](1)).unsafeRunSync()
   private val semaphore = F.toIO(Semaphore[F](SEMAPHORE_COUNT)).unsafeRunSync()
   private val mv = F.toIO(MVar.of[F, Map[String, MVar[F, Boolean]]](Map.empty)).unsafeRunSync()
   private val registerStopper =
-    F.toIO(MVar.of[F, Map[String, MVar[F, Boolean]]](Map.empty)).unsafeRunSync()
+    F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty))
+      .unsafeRunSync()
+  private val memoryMap = F.toIO(MVar.of[F, Set[Seq[String]]](Set.empty)).unsafeRunSync()
 
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
@@ -30,6 +35,7 @@ class PackageRegisterer[F[_]](
       .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
     val packs_dep = packs
       .filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
+    logger.info(s"semaphore conunt: ${SEMAPHORE_COUNT}")
     for {
       // パッケージのすべての基本情報を保存
       _ <-
@@ -55,10 +61,8 @@ class PackageRegisterer[F[_]](
               F.unit
             }
           )
-          .toList
-          .toNel
-          .get
-          .parSequence_
+          .runConcurrentry
+          .map(_ => Unit)
       _ <- F.pure(logger.info("added all package version"))
       // 一つも依存関係がないバージョンしかないパッケージについて依存関係を保存
       _ <-
@@ -73,108 +77,178 @@ class PackageRegisterer[F[_]](
               _ <- semaphore.release
             } yield ()
           )
-          .toList
-          .toNel
-          .get
-          .parSequence_
+          .runConcurrentry
+          .map(_ => Unit)
       _ <- F.pure(logger.info("added simple packages"))
-      _ <- semaphore.acquireN(SEMAPHORE_COUNT / 2)
+      _ <- semaphore.acquireN(8)
+      _ <- semaphore.available.map(x => logger.info(s"semaphore number: ${x}"))
       _ <-
         packs_dep
+          .slice(0, 1000)
           .map(x => x.versions.map(ver => (x.name, ver.version)))
           .flatten
           .map(v =>
             for {
               _ <- semaphore.acquire
+              _ <- F.pure(logger.info(s"${v._1} ${v._2} save_package_call"))
               _ <- savePackageDeps(v._1, v._2).handleError(e => {
                 logger.warn(
                   s"${v._1} ${v._2} package error: ${e.toString()}"
                 )
-                false
+                None
               })
               _ <- semaphore.release
             } yield ()
           )
-          .toList
-          .toNel
-          .get
-          .parSequence_
+          .runConcurrentry
+          .map(_ => Unit)
       _ <- F.pure(logger.info("Completed!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"))
     } yield ()
   }
 
-  def savePackageDeps(name: String, version: String): F[Boolean] = {
+  def savePackageDeps(
+      name: String,
+      version: String,
+      parents: Seq[String] = Seq.empty
+  ): F[Option[Map[String, Seq[PackageInfoBase]]]] = {
     val target = PackageInfoBase(name, version)
+    val memories = parents.map(parent => Seq(target.toString(), parent.toString()).sorted)
     for {
       stopper <- registerStopper.take
-       _ <- F.pure(logger.info(s"$name $version save_package_deps_start"))
+      _ <- F.pure(
+        logger.info(
+          s"$name $version save_package_deps_start : ${parents.mkString(",")}"
+        )
+      )
+      m <- memoryMap.take
       result <-
-        if (!(stopper contains target.toString())) {
+        if (memories.forall(pare => !m.contains(pare))) {
           for {
-            stop <- MVar.of[F, Boolean](false)
-            _ <- stop.take
-            _ <- registerStopper.put(stopper.updated(target.toString(), stop))
-            result <- savePackageDepsInternal(name, version)
-            _ <- stop.put(result)
+            _ <- memoryMap.put(m ++ memories.toSet)
+            result <-
+              if (!(stopper contains target.toString())) {
+                for {
+                  stop <- MVar.of[F, Option[Map[String, Seq[PackageInfoBase]]]](None)
+                  _ <- stop.take
+                  _ <- registerStopper.put(stopper.updated(target.toString(), stop))
+                  // 登録
+                  result <- savePackageDepsInternal(name, version, parents)
+                  _ <- stop.put(result)
+                  updated <- registerStopper.take.map(_.updated(target.toString(), stop))
+                  _ <- registerStopper.put(updated)
+                } yield result
+              } else {
+                for {
+                  _ <- registerStopper.put(stopper)
+                  stop <- registerStopper.read.map(_.get(target.toString()))
+                  result <- stop.get.read
+                } yield result
+              }
           } yield result
         } else {
           for {
-            _ <- registerStopper.put(stopper)
-            stop <- registerStopper.read.map(_.get(target.toString()))
-            result <- stop.get.read
-          } yield result
+            _ <- memoryMap.put(m ++ memories.toSet)
+            _ <- F.pure(logger.info(s"$name $version circular_detected"))
+          } yield None
         }
     } yield result
   }
 
-  def savePackageDepsInternal(name: String, version: String): F[Boolean] = {
+  def savePackageDepsInternal(
+      name: String,
+      version: String,
+      parents: Seq[String]
+  ): F[Option[Map[String, Seq[PackageInfoBase]]]] = {
     val target = PackageInfoBase(name, version)
-    logger.info(s"$name $version dep_calc_start")
-    infoRepository
-      .get(name, version)
-      .flatMap(v =>
-        // そもそもinfoに追加されてなかったらfalse
-        v.fold(F.pure(false))(x => {
-          val func = for {
-            // すべての適応する最新版を取得
-            v <-
-              x.dep
-                .map(d => infoRepository.getVersions(d._1).map(z => (d._1, latest(z, d._2))))
-                .toList
-                .toNel
-                .fold(F.pure(Seq.empty[(String, String)]))(y => y.parSequence.map(_.toList))
-            // それぞれの最新版についてそのすべての依存関係を取得
-            z <-
-              v.map(x =>
-                  alldepRepo
-                    .get(x._1, x._2)
-                    .flatMap(_.fold({
-                      // 追加されていなかった場合registerPackageを呼んでからallDepRepoに保存されているものを呼ぶ
-                      // もしだめだったらFalseが却ってくるのでその時点で例外を投げる
-                      for {
-                        v <- savePackageDeps(x._1, x._2)
-                        result <-
-                          if (v) alldepRepo.get(x._1, x._2).map(_.get)
-                          else throw new Error("dep not found!!!!")
-                      } yield (x._1, result.values.flatten[PackageInfoBase].toList)
-                    })(depmap => F.pure((x._1, depmap.values.flatten[PackageInfoBase].toList))))
-                )
-                .toList
-                .toNel
-                .fold(F.pure(Map.empty[String, Seq[PackageInfoBase]]))(_.parSequence
-                .map(_.toList.toMap))
-            // すべての依存を追加
-            _ <- alldepRepo.store(target, z)
-            // 依存関係を追加
-            _ <- depRelationRepository.addMulti(v.map(a => (a._1, target)))
-            _ <- F.pure(logger.info(s"$name $version dep_calc_complete"))
-          } yield true
-          func.handleError(e => {
-            logger.info(s"$name $version registor_failed | error: ${e.toString()}")
-            false
-          })
-        })
-      )
+    val get: F[Option[Map[String, Seq[PackageInfoBase]]]] = for {
+      _ <- F.pure(logger.info(s"$name $version dep_calc_start"))
+      targ <- infoRepository.get(name, version)
+      result <-
+        // もし存在しなかったらFalse
+        if (targ.isEmpty) {
+          F.pure(logger.info(s"$name $version dep_calc_failed | error: not found"))
+            .as[Option[Map[String, Seq[PackageInfoBase]]]](None)
+        } else {
+          val targetPack = targ.get
+          if (targetPack.dep.isEmpty) {
+            for {
+              _ <- alldepRepo.store(target, Map.empty)
+              _ <- F.pure(logger.info(s"$name $version dep_calc_complete (empty)"))
+            } yield Some(Map.empty[String, Seq[PackageInfoBase]])
+          } else {
+            for {
+              z <-
+                targ.get.dep
+                  .map(d => infoRepository.getVersions(d._1).map(z => (d, z)))
+                  .runConcurrentry
+                  .map(_.toList.map(x => (x._1._1, latest(x._2, x._1._2))))
+                  .handleError(e => {
+                    logger
+                      .info(s"$name $version dep_calc_failed_on_get_latest_version ${e.toString()}")
+                    throw e
+                  })
+              _ <- F.pure(logger.info(s"$name $version dep_calc_get_latests_version"))
+              // とりあえず最初に取得する。Optionの可能性がある
+              first <-
+                z.map(x => alldepRepo.get(x._1, x._2).map(d => (x, d)))
+                  .runConcurrentry
+                  .map(_.toList)
+                  .handleError(e => {
+                    logger.info(s"$name $version dep_calc_failed_on_get_deps_first ${e.toString()}")
+                    throw e
+                  })
+              _ <- F.pure(logger.info(s"$name $version dep_calc_get_deps_first"))
+              // Optionな場合はsavePackageDepsを呼んでもう一度
+              result <-
+                first
+                  .map(x =>
+                    x._2.fold[F[(String, Option[Map[String, Seq[PackageInfoBase]]])]]({
+                      val func: F[(String, Option[Map[String, Seq[PackageInfoBase]]])] =
+                        savePackageDeps(x._1._1, x._1._2, parents :+ target.toString()).map(v =>
+                          (x._1._1, v)
+                        )
+                      timeout(func, 20.second).handleErrorWith(v => {
+                        for {
+                          _ <- F.pure(s"$name $version timeouting...")
+                          check <- memoryMap.take.map(
+                            _.contains(
+                              Seq(
+                                target.toString(),
+                                PackageInfoBase(x._1._1, x._1._2).toString()
+                              ).sorted
+                            )
+                          )
+                          result <-
+                            if (check)
+                              F.pure[(String, Option[Map[String, Seq[PackageInfoBase]]])](
+                                (x._1._1, None)
+                              )
+                            else func
+                        } yield result
+                      })
+                    })(dep => F.pure((x._1._1, Some(dep))))
+                  )
+                  .runConcurrentry
+                  .map(
+                    _.toList.toMap.map(x => (x._1, x._2.get.values.flatten[PackageInfoBase].toList))
+                  )
+                  .handleError(e => {
+                    logger
+                      .info(s"$name $version dep_calc_failed_on_get_deps_second ${e.toString()}")
+                    throw e
+                  })
+              _ <- F.pure(logger.info(s"$name $version dep_calc_get_deps_second"))
+              _ <- alldepRepo.store(target, result)
+              _ <- depRelationRepository.addMulti(z.map(a => (a._1, target)))
+              _ <- F.pure(logger.info(s"$name $version dep_calc_complete"))
+            } yield Some(result)
+          }
+        }
+    } yield result
+    get.handleError(e => {
+      // logger.info(s"$name $version dep_calc_failed | error: ${e.toString()}")
+      None
+    })
   }
 }
 
@@ -187,5 +261,31 @@ object PackageRegisterer {
       .seq
       .sortWith((x, y) => SemVer(x) > SemVer(y))
       .head
+  }
+  implicit class RunConcurrentry[F[_], A](val src: TraversableOnce[F[A]])(implicit
+      F: ConcurrentEffect[F],
+      P: Parallel[F]
+  ) {
+    def runConcurrentry = src.toList.parSequence
+  }
+
+  def timeoutTo[F[_], A](fa: F[A], after: FiniteDuration, fallback: F[A])(implicit
+      timer: Timer[F],
+      cs: ContextShift[F],
+      F: ConcurrentEffect[F]
+  ): F[A] = {
+    F.race(fa, timer.sleep(after)).flatMap {
+      case Left(a)  => F.pure(a)
+      case Right(_) => fallback
+    }
+  }
+
+  def timeout[F[_], A](fa: F[A], after: FiniteDuration)(implicit
+      timer: Timer[F],
+      cs: ContextShift[F],
+      F: ConcurrentEffect[F]
+  ): F[A] = {
+    val error = new CancellationException(after.toString)
+    timeoutTo(fa, after, F.raiseError(error))
   }
 }

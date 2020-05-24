@@ -120,36 +120,28 @@ class PackageRegisterer[F[_]](
           s"$name $version save_package_deps_start : ${parents.mkString(",")}"
         )
       )
-      m <- memoryMap.take
       result <-
-        if (memories.forall(pare => !m.contains(pare))) {
+        if (!(stopper contains target.toString())) {
           for {
-            _ <- memoryMap.put(m ++ memories.toSet)
-            result <-
-              if (!(stopper contains target.toString())) {
-                for {
-                  stop <- MVar.of[F, Option[Map[String, Seq[PackageInfoBase]]]](None)
-                  _ <- stop.take
-                  _ <- registerStopper.put(stopper.updated(target.toString(), stop))
-                  // 登録
-                  result <- savePackageDepsInternal(name, version, parents)
-                  _ <- stop.put(result)
-                  updated <- registerStopper.take.map(_.updated(target.toString(), stop))
-                  _ <- registerStopper.put(updated)
-                } yield result
-              } else {
-                for {
-                  _ <- registerStopper.put(stopper)
-                  stop <- registerStopper.read.map(_.get(target.toString()))
-                  result <- stop.get.read
-                } yield result
-              }
+            stop <- MVar.of[F, Option[Map[String, Seq[PackageInfoBase]]]](None)
+            _ <- stop.take
+            _ <- registerStopper.put(stopper.updated(target.toString(), stop))
+            // 登録
+            result <- timeout(savePackageDepsInternal(name, version, parents), 5.second)
+              .handleError(_ => {
+                logger.info(s"$name $version timeout_catched!!!")
+                None
+              })
+            _ <- stop.put(result)
+            updated <- registerStopper.take.map(_.updated(target.toString(), stop))
+            _ <- registerStopper.put(updated)
           } yield result
         } else {
           for {
-            _ <- memoryMap.put(m ++ memories.toSet)
-            _ <- F.pure(logger.info(s"$name $version circular_detected"))
-          } yield None
+            _ <- registerStopper.put(stopper)
+            stop <- registerStopper.read.map(_.get(target.toString()))
+            result <- stop.get.read
+          } yield result
         }
     } yield result
   }
@@ -202,31 +194,11 @@ class PackageRegisterer[F[_]](
               result <-
                 first
                   .map(x =>
-                    x._2.fold[F[(String, Option[Map[String, Seq[PackageInfoBase]]])]]({
-                      val func: F[(String, Option[Map[String, Seq[PackageInfoBase]]])] =
-                        savePackageDeps(x._1._1, x._1._2, parents :+ target.toString()).map(v =>
-                          (x._1._1, v)
-                        )
-                      timeout(func, 20.second).handleErrorWith(v => {
-                        for {
-                          _ <- F.pure(s"$name $version timeouting...")
-                          check <- memoryMap.take.map(
-                            _.contains(
-                              Seq(
-                                target.toString(),
-                                PackageInfoBase(x._1._1, x._1._2).toString()
-                              ).sorted
-                            )
-                          )
-                          result <-
-                            if (check)
-                              F.pure[(String, Option[Map[String, Seq[PackageInfoBase]]])](
-                                (x._1._1, None)
-                              )
-                            else func
-                        } yield result
-                      })
-                    })(dep => F.pure((x._1._1, Some(dep))))
+                    x._2.fold(
+                      savePackageDeps(x._1._1, x._1._2, parents :+ target.toString())
+                        .map(v => (x._1._1, v))
+                        .handleError(v => (x._1._1, None))
+                    )(dep => F.pure((x._1._1, Some(dep))))
                   )
                   .runConcurrentry
                   .map(
@@ -250,6 +222,28 @@ class PackageRegisterer[F[_]](
       None
     })
   }
+  def timeoutTo[F[_], A](fa: F[A], after: FiniteDuration, fallback: F[A])(implicit
+      timer: Timer[F],
+      cs: ContextShift[F],
+      F: ConcurrentEffect[F]
+  ): F[A] = {
+    F.race(fa, timer.sleep(after)).flatMap {
+      case Left(a) => F.pure(a)
+      case Right(_) => {
+        fallback
+      }
+    }
+  }
+
+  def timeout[F[_], A](fa: F[A], after: FiniteDuration)(implicit
+      timer: Timer[F],
+      cs: ContextShift[F],
+      F: ConcurrentEffect[F]
+  ): F[A] = {
+    logger.info("timeout_setting!!!")
+    val error = new CancellationException(after.toString)
+    timeoutTo(fa, after, F.raiseError(error))
+  }
 }
 
 object PackageRegisterer {
@@ -269,23 +263,4 @@ object PackageRegisterer {
     def runConcurrentry = src.toList.parSequence
   }
 
-  def timeoutTo[F[_], A](fa: F[A], after: FiniteDuration, fallback: F[A])(implicit
-      timer: Timer[F],
-      cs: ContextShift[F],
-      F: ConcurrentEffect[F]
-  ): F[A] = {
-    F.race(fa, timer.sleep(after)).flatMap {
-      case Left(a)  => F.pure(a)
-      case Right(_) => fallback
-    }
-  }
-
-  def timeout[F[_], A](fa: F[A], after: FiniteDuration)(implicit
-      timer: Timer[F],
-      cs: ContextShift[F],
-      F: ConcurrentEffect[F]
-  ): F[A] = {
-    val error = new CancellationException(after.toString)
-    timeoutTo(fa, after, F.raiseError(error))
-  }
 }

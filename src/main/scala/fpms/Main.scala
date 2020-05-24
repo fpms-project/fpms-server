@@ -1,6 +1,7 @@
 package fpms
 
 import cats.effect.concurrent.MVar
+import cats.effect.concurrent.Semaphore
 import cats.effect.{IOApp, _}
 import fpms.repository.memory.{PackageAllDepMemoryRepository, PackageDepRelationMemoryRepository}
 import fpms.repository.memoryexception.PackageInfoMemoryRepository
@@ -32,7 +33,7 @@ object Main extends IOApp {
         d <- MVar.of[IO, Map[PackageInfoBase, PackageInfo]](Map.empty)
       } yield new PackageInfoMemoryRepository[IO](c, d)
       a <- for {
-        a <- MVar.of[IO, Map[PackageInfoBase, Seq[PackageInfoBase]]](Map.empty)
+        a <- MVar.of[IO, Map[PackageInfoBase, Map[String, Seq[PackageInfoBase]]]](Map.empty)
       } yield new PackageAllDepMemoryRepository[IO](a)
       b <- for {
         b <- MVar.of[IO, Map[String, Seq[PackageInfoBase]]](Map.empty)

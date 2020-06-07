@@ -12,6 +12,8 @@ import cats.effect.concurrent.{MVar, Semaphore}
 import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.net.URLEncoder
+import scalax.collection.Graph // or scalax.collection.mutable.Graph
+import scalax.collection.GraphPredef._, scalax.collection.GraphEdge._
 
 class PackageRegisterer[F[_]](
     infoRepository: PackageInfoRepository[F],
@@ -27,7 +29,7 @@ class PackageRegisterer[F[_]](
     F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty))
       .unsafeRunSync()
   private val memoryMap = F.toIO(MVar.of[F, Set[Seq[String]]](Set.empty)).unsafeRunSync()
-
+  private val graph = F.toIO(MVar.of[F, Graph[String, HyperEdge]](Graph())).unsafeRunSync()
   import PackageRegisterer._
   def registerPackages(): F[Unit] = {
 
@@ -35,6 +37,8 @@ class PackageRegisterer[F[_]](
       .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
     val packs_dep = packs
       .filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
+    val pack_dep = packs.flatMap(_.versions).filter(_.dep.exists(_.nonEmpty))
+    val pack_non_dep = packs.flatMap(_.versions).filter(_.dep.forall(_.isEmpty))
     logger.info(s"semaphore conunt: ${SEMAPHORE_COUNT}")
     for {
       // パッケージのすべての基本情報を保存
@@ -256,6 +260,7 @@ object PackageRegisterer {
       .sortWith((x, y) => SemVer(x) > SemVer(y))
       .head
   }
+
   implicit class RunConcurrentry[F[_], A](val src: TraversableOnce[F[A]])(implicit
       F: ConcurrentEffect[F],
       P: Parallel[F]
@@ -263,4 +268,5 @@ object PackageRegisterer {
     def runConcurrentry = src.toList.parSequence
   }
 
+  case class Node(changeFromBefore: Boolean, packages: Set[String])
 }

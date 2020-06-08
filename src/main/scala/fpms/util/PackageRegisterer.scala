@@ -14,6 +14,7 @@ import java.nio.charset.StandardCharsets
 import java.net.URLEncoder
 import scalax.collection.Graph // or scalax.collection.mutable.Graph
 import scalax.collection.GraphPredef._, scalax.collection.GraphEdge._
+import scala.util.control.Breaks
 
 class PackageRegisterer[F[_]](
     infoRepository: PackageInfoRepository[F],
@@ -21,25 +22,19 @@ class PackageRegisterer[F[_]](
     alldepRepo: PackageAllDepRepository[F],
     var packs: Seq[RootInterface]
 )(implicit F: ConcurrentEffect[F], P: Parallel[F], timer: Timer[F], cs: ContextShift[F]) {
-  val SEMAPHORE_COUNT = Runtime.getRuntime().availableProcessors()
+
+  import PackageRegisterer._
+
   private val logger = LoggerFactory.getLogger(this.getClass)
   private val semaphore = F.toIO(Semaphore[F](SEMAPHORE_COUNT)).unsafeRunSync()
-  private val mv = F.toIO(MVar.of[F, Map[String, MVar[F, Boolean]]](Map.empty)).unsafeRunSync()
   private val registerStopper =
-    F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty))
-      .unsafeRunSync()
-  private val memoryMap = F.toIO(MVar.of[F, Set[Seq[String]]](Set.empty)).unsafeRunSync()
-  private val graph = F.toIO(MVar.of[F, Graph[String, HyperEdge]](Graph())).unsafeRunSync()
-  import PackageRegisterer._
-  def registerPackages(): F[Unit] = {
+    F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty)).unsafeRunSync()
 
-    val packs_nodep = packs
-      .filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
-    val packs_dep = packs
-      .filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
+  def registerPackages(): F[Unit] = {
+    val packs_nodep = packs.filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
+    val packs_dep = packs.filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
     val pack_dep = packs.flatMap(_.versions).filter(_.dep.exists(_.nonEmpty))
     val pack_non_dep = packs.flatMap(_.versions).filter(_.dep.forall(_.isEmpty))
-    logger.info(s"semaphore conunt: ${SEMAPHORE_COUNT}")
     for {
       // パッケージのすべての基本情報を保存
       _ <-
@@ -47,7 +42,9 @@ class PackageRegisterer[F[_]](
           .map(v =>
             if (v.versions.nonEmpty) {
               for {
-                _ <- infoRepository.storeVersions(v.name, v.versions.map(_.version))
+                _ <- infoRepository.storeVersions(
+                  v.versions.map(x => PackageInfo(v.name, x.version, x.dep.getOrElse(Map.empty)))
+                )
                 _ <-
                   v.versions
                     .map(x =>
@@ -110,6 +107,97 @@ class PackageRegisterer[F[_]](
     } yield ()
   }
 
+  def createGraph(first: PackageInfoBase) = {
+    for {
+      graph <- MVar.of[F, Graph[PackageInfoBase, HyperEdge]](Graph(first))
+      map <- MVar.of[F, Map[PackageInfoBase, Node]](Map.empty)
+      _ <- F.delay({
+        val b = new Breaks
+        b.breakable {
+          while (true) {
+            // 子パッケージを取得していないパッケージについて取得
+            F.toIO(
+                map.read
+                  .map(_.values.filter(!_.fetchPackages))
+                  .flatMap(x => x.map(t => fetchPackages(t, graph, map)).runConcurrentry)
+              )
+              .unsafeRunSync()
+            // パッケージの集合を更新し、変わっていないかどうかを返す
+            // 子パッケージの集合が一つとして変わっていなかった場合、breakする
+            if (checkGraph(first, graph, map)) {
+              b.break()
+            }
+          }
+        }
+      })
+    } yield ()
+  }
+
+  def checkGraph(
+      start: PackageInfoBase,
+      graph: MVar[F, Graph[PackageInfoBase, HyperEdge]],
+      map: MVar[F, Map[PackageInfoBase, Node]]
+  ): Boolean = {
+    // TODO: ここでグラフのそれぞれのNodeの更新と計算をやる
+    false
+  }
+
+  def fetchPackages(
+      target: Node,
+      graph: MVar[F, Graph[PackageInfoBase, HyperEdge]],
+      map: MVar[F, Map[PackageInfoBase, Node]]
+  ) = {
+    def createNode(v: PackageInfo): F[Option[Node]] = {
+      for {
+        has <- map.read.map(_.get(v.toBaseInfo).isDefined)
+        result <-
+          if (has) {
+            alldepRepo
+              .get(v.name, v.version)
+              .map(_ match {
+                // すでに保存されている場合はそのデータを用いる
+                case Some(value) => Some(Node(v, false, true, true, value))
+                // まだ保存されていない場合は空のNodeを作ってあげる
+                case None => Some(Node(v, true, false, false, Map.empty))
+              })
+          } else {
+            F.pure[Option[Node]](None)
+          }
+      } yield result
+    }
+    for {
+      // 依存パッケージを取得
+      deps <-
+        target.src.dep
+          .map(d => infoRepository.getVersions(d._1).map(z => (d, z)))
+          .runConcurrentry
+          .map(
+            _.map(x => {
+              val versions = x._2.map(_.map(_.version))
+              x._2.get.filter(_.version == latest(versions, x._1._2)).head
+            })
+          )
+          .handleError(e => {
+            throw e
+          })
+      // Graphを更新(重複していてもGraph側で対処してくれるので問題ない)
+      updated <- graph.take.map(v => v ++ (deps.map(v => (target.src.toBaseInfo ~> v.toBaseInfo))))
+      _ <- graph.put(updated)
+      // もしすでに保存されていたらそのデータからNodeを作成、そうじゃない場合は空のNodeを作成
+      _ <-
+        deps
+          .map(v => {
+            createNode(v).map(_ match {
+              case Some(v) => map.take.map(_.updated(v.src.toBaseInfo, v)).flatMap(x => map.put(x))
+              case None    => F.unit
+            })
+          })
+          .runConcurrentry
+      // 最後に自分自身のNodeを更新
+      _ <- map.take.map(_.updated(target.src.toBaseInfo, target.copy(fetchPackages = true))).flatMap(v => map.put(v))
+    } yield ()
+  }
+
   def savePackageDeps(
       name: String,
       version: String,
@@ -131,11 +219,10 @@ class PackageRegisterer[F[_]](
             _ <- stop.take
             _ <- registerStopper.put(stopper.updated(target.toString(), stop))
             // 登録
-            result <- timeout(savePackageDepsInternal(name, version, parents), 5.second)
-              .handleError(_ => {
-                logger.info(s"$name $version timeout_catched!!!")
-                None
-              })
+            result <- timeout(savePackageDepsInternal(name, version, parents), 5.second).handleError(_ => {
+              logger.info(s"$name $version timeout_catched!!!")
+              None
+            })
             _ <- stop.put(result)
             updated <- registerStopper.take.map(_.updated(target.toString(), stop))
             _ <- registerStopper.put(updated)
@@ -177,10 +264,9 @@ class PackageRegisterer[F[_]](
                 targ.get.dep
                   .map(d => infoRepository.getVersions(d._1).map(z => (d, z)))
                   .runConcurrentry
-                  .map(_.toList.map(x => (x._1._1, latest(x._2, x._1._2))))
+                  .map(_.toList.map(x => (x._1._1, latest(x._2.map(_.map(_.version)), x._1._2))))
                   .handleError(e => {
-                    logger
-                      .info(s"$name $version dep_calc_failed_on_get_latest_version ${e.toString()}")
+                    logger.info(s"$name $version dep_calc_failed_on_get_latest_version ${e.toString()}")
                     throw e
                   })
               _ <- F.pure(logger.info(s"$name $version dep_calc_get_latests_version"))
@@ -209,8 +295,7 @@ class PackageRegisterer[F[_]](
                     _.toList.toMap.map(x => (x._1, x._2.get.values.flatten[PackageInfoBase].toList))
                   )
                   .handleError(e => {
-                    logger
-                      .info(s"$name $version dep_calc_failed_on_get_deps_second ${e.toString()}")
+                    logger.info(s"$name $version dep_calc_failed_on_get_deps_second ${e.toString()}")
                     throw e
                   })
               _ <- F.pure(logger.info(s"$name $version dep_calc_get_deps_second"))
@@ -252,13 +337,11 @@ class PackageRegisterer[F[_]](
 
 object PackageRegisterer {
 
+  val SEMAPHORE_COUNT = Runtime.getRuntime().availableProcessors()
+
   import fpms.VersionCondition._
   def latest(vers: Option[Seq[String]], condition: String): String = {
-    vers.get
-      .filter(ver => condition.valid(SemVer(ver)))
-      .seq
-      .sortWith((x, y) => SemVer(x) > SemVer(y))
-      .head
+    vers.get.filter(ver => condition.valid(SemVer(ver))).seq.sortWith((x, y) => SemVer(x) > SemVer(y)).head
   }
 
   implicit class RunConcurrentry[F[_], A](val src: TraversableOnce[F[A]])(implicit
@@ -268,5 +351,18 @@ object PackageRegisterer {
     def runConcurrentry = src.toList.parSequence
   }
 
-  case class Node(changeFromBefore: Boolean, packages: Set[String])
+  case class Node(
+      src: PackageInfo,
+      changeFromBefore: Boolean,
+      fetchPackages: Boolean,
+      completeCalculate: Boolean,
+      packages: Map[String, Seq[PackageInfoBase]]
+  ) {
+    override def equals(other: Any) =
+      other match {
+        case that: Node => that.src.toBaseInfo == src.toBaseInfo
+        case _          => false
+      }
+  }
+
 }

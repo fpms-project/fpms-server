@@ -18,18 +18,25 @@ class PackageInfoMemoryRepository[F[_]](
     } yield ()
   }
 
-  override def storeVersions(name: String, versions: Seq[String]): F[Unit] = {
+  override def storeVersions(infos: Seq[PackageInfo]): F[Unit] = {
     for {
-      s <- versionMap.take.map(v => v.updated(name, versions))
+      s <- versionMap.take.map(v => v.updated(infos.head.name, infos.map(_.version)))
       _ <- versionMap.put(s)
+      x <- depMap.take.map(x => x ++ infos.map(v => (PackageInfoBase(v.name, v.version) -> v)))
+      _ <- depMap.put(x)
     } yield ()
   }
 
   override def get(name: String, version: String): F[Option[PackageInfo]] =
     depMap.read.map(v => v.get(PackageInfoBase(name, version)))
 
-  override def getVersions(name: String): F[Option[Seq[String]]] =
-    versionMap.read.map(v => v.get(name))
+  override def getVersions(name: String): F[Option[Seq[PackageInfo]]] =
+    for {
+      vs <- versionMap.read.map(_.get(name))
+      m <- depMap.read.map(mx =>
+        vs.map(versions => versions.map(v => mx.get(PackageInfoBase(name, v))).flatten)
+      )
+    } yield m
 
   override def has(name: String): F[Boolean] = getVersions(name).map(_.isDefined)
 }

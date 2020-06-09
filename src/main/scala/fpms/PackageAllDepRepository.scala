@@ -9,4 +9,6 @@ trait PackageAllDepRepository[F[_]] {
   def storeMultiEmpty(b: Seq[PackageInfoBase]): F[Unit]
 
   def get(name: String, version: String): F[Option[Map[String, Seq[PackageInfoBase]]]]
+
+  def count(): F[Int]
 }

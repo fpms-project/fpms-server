@@ -31,10 +31,10 @@ class PackageRegisterer[F[_]](
     F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty)).unsafeRunSync()
 
   def registerPackages(): F[Unit] = {
-    val packs_nodep = packs.filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
-    val pack_dep = packs
-      .flatMap(r => r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))
-      .filter(_.dep.exists(_.nonEmpty))
+    val pack_convert =
+      packs.flatMap(r => r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))
+    val pack_nodep = pack_convert.filter(_.dep.isEmpty)
+    val pack_dep = pack_convert.filter(_.dep.nonEmpty)
     for {
       // パッケージのすべての基本情報を保存
       _ <-
@@ -49,18 +49,7 @@ class PackageRegisterer[F[_]](
           .runConcurrentry
       _ <- F.pure(logger.info("added all package version"))
       // 一つも依存関係がないバージョンしかないパッケージについて依存関係を保存
-      _ <-
-        packs_nodep
-          .map(v =>
-            for {
-              _ <- semaphore.acquire
-              _ <- alldepRepo.storeMultiEmpty(
-                v.versions.map(x => PackageInfoBase(v.name, x.version))
-              )
-              _ <- semaphore.release
-            } yield ()
-          )
-          .runConcurrentry
+      _ <- alldepRepo.storeMultiEmpty(pack_nodep.map(_.base))
       _ <- F.pure(logger.info("added simple packages"))
     } yield {
       pack_dep.foreach(v => {
@@ -125,7 +114,7 @@ class PackageRegisterer[F[_]](
             .unsafeRunSync()
         }
       })
-      _ <- F.pure(logger.info(s"complete graph ${first.name}, ${first.version}"))
+      _ <- alldepRepo.count().map(count => logger.info(s"current count ${count}"))
     } yield ()
   }
 
@@ -195,7 +184,11 @@ class PackageRegisterer[F[_]](
           .map(
             _.map(x => {
               val versions = x._2.map(_.map(_.version))
-              x._2.get.filter(_.version == latest(versions, x._1._2)).head
+              if (x._2.isEmpty) {
+                throw new Error(s"${x._1._1} not found")
+              } else {
+                x._2.get.filter(_.version == latest(versions, x._1._2)).head
+              }
             })
           )
           .handleError(e => {

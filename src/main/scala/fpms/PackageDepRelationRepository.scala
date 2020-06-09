@@ -1,7 +1,7 @@
 package fpms
 
 case class PackageInfoBase(name: String, version: String) {
-  override def toString(): String = s"$name@$version"
+  override def toString: String = s"$name@$version"
 }
 
 trait PackageDepRelationRepository[F[_]] {

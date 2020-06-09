@@ -8,7 +8,7 @@ case class PackageInfo(name: String, version: String, dep: Map[String, String]) 
       case d: PackageInfo => d.name == name && version == d.version
       case _              => false
     }
-  def toBaseInfo = PackageInfoBase(name, version)
+  def base = PackageInfoBase(name, version)
 }
 
 object PackageInfo {

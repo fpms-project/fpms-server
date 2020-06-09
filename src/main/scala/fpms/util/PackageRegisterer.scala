@@ -32,38 +32,21 @@ class PackageRegisterer[F[_]](
 
   def registerPackages(): F[Unit] = {
     val packs_nodep = packs.filter(v => v.versions.forall(!_.dep.exists(_.nonEmpty)))
-    val packs_dep = packs.filter(v => v.versions.exists(_.dep.exists(_.nonEmpty)))
-    val pack_dep = packs.flatMap(_.versions).filter(_.dep.exists(_.nonEmpty))
-    val pack_non_dep = packs.flatMap(_.versions).filter(_.dep.forall(_.isEmpty))
+    val pack_dep = packs
+      .flatMap(r => r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))
+      .filter(_.dep.exists(_.nonEmpty))
     for {
       // パッケージのすべての基本情報を保存
       _ <-
         packs
           .map(v =>
-            if (v.versions.nonEmpty) {
-              for {
-                _ <- infoRepository.storeVersions(
-                  v.versions.map(x => PackageInfo(v.name, x.version, x.dep.getOrElse(Map.empty)))
-                )
-                _ <-
-                  v.versions
-                    .map(x =>
-                      infoRepository.store(
-                        PackageInfo(v.name, x.version, x.dep.getOrElse(Map.empty))
-                      )
-                    )
-                    .toList
-                    .toNel
-                    .get
-                    .parSequence_
-              } yield ()
-            } else {
-              // ないことがあるらしい……。
-              F.unit
-            }
+            if (v.versions.nonEmpty)
+              infoRepository.storeVersions(
+                v.versions.map(x => PackageInfo(v.name, x.version, x.dep.getOrElse(Map.empty)))
+              )
+            else F.unit // ないことがあるらしい……。
           )
           .runConcurrentry
-          .map(_ => Unit)
       _ <- F.pure(logger.info("added all package version"))
       // 一つも依存関係がないバージョンしかないパッケージについて依存関係を保存
       _ <-
@@ -74,72 +57,113 @@ class PackageRegisterer[F[_]](
               _ <- alldepRepo.storeMultiEmpty(
                 v.versions.map(x => PackageInfoBase(v.name, x.version))
               )
-              _ <- F.pure(logger.info(s"${v.name} added_simple_package"))
               _ <- semaphore.release
             } yield ()
           )
           .runConcurrentry
-          .map(_ => Unit)
       _ <- F.pure(logger.info("added simple packages"))
-      _ <- semaphore.acquireN(8)
-      _ <- semaphore.available.map(x => logger.info(s"semaphore number: ${x}"))
-      _ <-
-        packs_dep
-          .slice(0, 1000)
-          .map(x => x.versions.map(ver => (x.name, ver.version)))
-          .flatten
-          .map(v =>
-            for {
-              _ <- semaphore.acquire
-              _ <- F.pure(logger.info(s"${v._1} ${v._2} save_package_call"))
-              _ <- savePackageDeps(v._1, v._2).handleError(e => {
-                logger.warn(
-                  s"${v._1} ${v._2} package error: ${e.toString()}"
-                )
-                None
-              })
-              _ <- semaphore.release
-            } yield ()
+    } yield {
+      pack_dep.foreach(v => {
+        F.toIO(
+            alldepRepo
+              .get(v.name, v.version)
+              .flatMap(_.fold({
+                createGraph(v)
+              })(_ => F.unit))
           )
-          .runConcurrentry
-          .map(_ => Unit)
-      _ <- F.pure(logger.info("Completed!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"))
-    } yield ()
+          .unsafeRunSync()
+      })
+    }
   }
 
-  def createGraph(first: PackageInfoBase) = {
+  def createGraph(first: PackageInfo) = {
+    val node = Node(first, true, false, false, Map.empty)
     for {
-      graph <- MVar.of[F, Graph[PackageInfoBase, HyperEdge]](Graph(first))
-      map <- MVar.of[F, Map[PackageInfoBase, Node]](Map.empty)
+      _ <- F.pure(logger.info(s"create graph ${first.name}, ${first.version}"))
+      graph <- MVar.of[F, Graph[PackageInfoBase, HyperEdge]](Graph(first.base))
+      map <- MVar.of[F, Map[PackageInfoBase, Node]](Map(first.base -> node))
       _ <- F.delay({
         val b = new Breaks
+        var complete = false
         b.breakable {
           while (true) {
-            // 子パッケージを取得していないパッケージについて取得
-            F.toIO(
-                map.read
-                  .map(_.values.filter(!_.fetchPackages))
-                  .flatMap(x => x.map(t => fetchPackages(t, graph, map)).runConcurrentry)
-              )
-              .unsafeRunSync()
+            try {
+              // 子パッケージを取得していないパッケージについて取得
+              F.toIO(
+                  map.read
+                    .map(_.values.filter(!_.fetchPackages))
+                    .flatMap(x => x.map(t => fetchPackages(t, graph, map)).runConcurrentry)
+                )
+                .unsafeRunSync()
+            } catch {
+              case e: Throwable => {
+                logger.info(s"${e.toString()}")
+                b.break
+              }
+            }
             // パッケージの集合を更新し、変わっていないかどうかを返す
             // 子パッケージの集合が一つとして変わっていなかった場合、breakする
-            if (checkGraph(first, graph, map)) {
-              b.break()
+            if (checkGraph(first.base, graph, map)) {
+              complete = true
+              b.break
             }
+            F.toIO(
+                graph.read.map(v => logger.info(s"graph: ${first.name}, ${first.version} ${v}"))
+              )
+              .unsafeRunSync()
           }
         }
+        if (complete) {
+          F.toIO(map.read.flatMap(_.map(v => alldepRepo.store(v._1, v._2.packages)).runConcurrentry)).unsafeRunSync()
+          F.toIO(
+              graph.read.flatMap(
+                _.nodes
+                  .map(x => depRelationRepository.addMulti(x.diSuccessors.map(dis => (x.name, dis.value)).toSeq))
+                  .runConcurrentry
+              )
+            )
+            .unsafeRunSync()
+        }
       })
+      _ <- F.pure(logger.info(s"complete graph ${first.name}, ${first.version}"))
     } yield ()
   }
 
   def checkGraph(
       start: PackageInfoBase,
-      graph: MVar[F, Graph[PackageInfoBase, HyperEdge]],
-      map: MVar[F, Map[PackageInfoBase, Node]]
+      graphm: MVar[F, Graph[PackageInfoBase, HyperEdge]],
+      mapm: MVar[F, Map[PackageInfoBase, Node]]
   ): Boolean = {
-    // TODO: ここでグラフのそれぞれのNodeの更新と計算をやる
-    false
+    val graph = F.toIO(graphm.read).unsafeRunSync()
+    val mumap = scala.collection.mutable.Map[PackageInfoBase, Node](F.toIO(mapm.take).unsafeRunSync().toSeq: _*)
+    val startNode = graph get start
+    def updateNode(
+        node: graph.NodeT,
+        parents: Seq[PackageInfoBase],
+        mumap: scala.collection.mutable.Map[PackageInfoBase, Node]
+    ): Node = {
+      if (mumap.get(node.value).exists(_.completeCalculate)) return mumap.get(node.value).get
+      val childs = node.diSuccessors
+      val deps = childs
+        .map(c => {
+          if (parents.contains(c.value)) {
+            mumap.get(c.value).get
+          } else {
+            updateNode(c, parents :+ node.value, mumap)
+          }
+        })
+        .map(v => (v.src.base.toString(), v.packages.values.flatten.toSeq))
+        .toMap
+      val result = mumap
+        .get(node.value)
+        .map(before => before.copy(packages = deps, changeFromBefore = deps != before.packages))
+        .get
+      mumap.update(node.value, result)
+      result
+    }
+    updateNode(startNode, Seq.empty, mumap)
+    F.toIO(mapm.put(mumap.toMap)).unsafeRunSync()
+    mumap.forall(p => !p._2.changeFromBefore)
   }
 
   def fetchPackages(
@@ -149,20 +173,17 @@ class PackageRegisterer[F[_]](
   ) = {
     def createNode(v: PackageInfo): F[Option[Node]] = {
       for {
-        has <- map.read.map(_.get(v.toBaseInfo).isDefined)
+        has <- map.read.map(_.get(v.base).isDefined)
         result <-
-          if (has) {
+          if (!has)
             alldepRepo
               .get(v.name, v.version)
-              .map(_ match {
-                // すでに保存されている場合はそのデータを用いる
+              .map(_ match { // すでに保存されている場合はそのデータを用いる
                 case Some(value) => Some(Node(v, false, true, true, value))
                 // まだ保存されていない場合は空のNodeを作ってあげる
                 case None => Some(Node(v, true, false, false, Map.empty))
               })
-          } else {
-            F.pure[Option[Node]](None)
-          }
+          else F.pure[Option[Node]](None)
       } yield result
     }
     for {
@@ -181,20 +202,20 @@ class PackageRegisterer[F[_]](
             throw e
           })
       // Graphを更新(重複していてもGraph側で対処してくれるので問題ない)
-      updated <- graph.take.map(v => v ++ (deps.map(v => (target.src.toBaseInfo ~> v.toBaseInfo))))
+      updated <- graph.take.map(v => v ++ (deps.map(v => (target.src.base ~> v.base))))
       _ <- graph.put(updated)
       // もしすでに保存されていたらそのデータからNodeを作成、そうじゃない場合は空のNodeを作成
       _ <-
         deps
-          .map(v => {
-            createNode(v).map(_ match {
-              case Some(v) => map.take.map(_.updated(v.src.toBaseInfo, v)).flatMap(x => map.put(x))
+          .map(v =>
+            createNode(v).flatMap(_ match {
+              case Some(v) => map.take.map(_.updated(v.src.base, v)).flatMap(x => map.put(x))
               case None    => F.unit
             })
-          })
+          )
           .runConcurrentry
       // 最後に自分自身のNodeを更新
-      _ <- map.take.map(_.updated(target.src.toBaseInfo, target.copy(fetchPackages = true))).flatMap(v => map.put(v))
+      _ <- map.take.map(_.updated(target.src.base, target.copy(fetchPackages = true))).flatMap(v => map.put(v))
     } yield ()
   }
 
@@ -360,7 +381,7 @@ object PackageRegisterer {
   ) {
     override def equals(other: Any) =
       other match {
-        case that: Node => that.src.toBaseInfo == src.toBaseInfo
+        case that: Node => that.src.base == src.base
         case _          => false
       }
   }

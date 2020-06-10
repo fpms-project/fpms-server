@@ -11,7 +11,7 @@ import java.net.URLDecoder
 
 object JsonLoader {
 
-  val MAX_FILE_COUNT = 31
+  val MAX_FILE_COUNT = 63
   private val logger = LoggerFactory.getLogger(this.getClass)
 
   def createLists(count: Int = MAX_FILE_COUNT): Seq[RootInterface] = {

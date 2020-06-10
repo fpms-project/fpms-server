@@ -15,6 +15,7 @@ import java.net.URLEncoder
 import scalax.collection.Graph // or scalax.collection.mutable.Graph
 import scalax.collection.GraphPredef._, scalax.collection.GraphEdge._
 import scala.util.control.Breaks
+import scala.util.Try
 
 class PackageRegisterer[F[_]](
     infoRepository: PackageInfoRepository[F],
@@ -29,12 +30,19 @@ class PackageRegisterer[F[_]](
   private val semaphore = F.toIO(Semaphore[F](SEMAPHORE_COUNT)).unsafeRunSync()
   private val registerStopper =
     F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty)).unsafeRunSync()
+  private val pack_convert =
+    packs.flatMap(r => r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))
+  private val packs_map: Map[String, Seq[PackageInfo]] =
+    packs.map(r => (r.name, r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))).toMap
 
   def registerPackages(): F[Unit] = {
-    val pack_convert =
-      packs.flatMap(r => r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))
     val pack_nodep = pack_convert.filter(_.dep.isEmpty)
     val pack_dep = pack_convert.filter(_.dep.nonEmpty)
+    logger.info(s"package length: ${pack_convert.length}")
+    logger.info(s"package type: ${packs_map.size}")
+    algo()
+    F.pure(())
+    /*
     for {
       // パッケージのすべての基本情報を保存
       _ <-
@@ -52,17 +60,93 @@ class PackageRegisterer[F[_]](
       _ <- alldepRepo.storeMultiEmpty(pack_nodep.map(_.base))
       _ <- F.pure(logger.info("added simple packages"))
     } yield {
-      pack_dep.foreach(v => {
-        F.toIO(
-            alldepRepo
-              .get(v.name, v.version)
-              .flatMap(_.fold({
-                createGraph(v)
-              })(_ => F.unit))
-          )
-          .unsafeRunSync()
-      })
+      algo()
     }
+     */
+  }
+
+  def algo() {
+    logger.info("call algo")
+    val cache = scala.collection.mutable.Map.empty[(String, String), PackageInfo]
+    val array = scala.collection.mutable.ArrayBuffer.empty[PackageNode]
+    // それぞれのパッケージをNodeに変換する
+    for (i <- 0 to pack_convert.size - 1) {
+      if (i % 100000 == 0) {
+        logger.info(s"count : ${i}, length: ${array.size}")
+      }
+      val pack = pack_convert(i)
+      try {
+        if (pack.dep.isEmpty) {
+          array += PackageNode(pack, Seq.empty, true, Map.empty)
+        } else {
+          val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+          var failed = false
+          var j = pack.dep.size - 1
+          while (!failed && j > -1) {
+            val d = pack.dep.toSeq.apply(j)
+            if (cache.get(d).isDefined) {
+              depsx += cache(d)
+            } else {
+              var depP = for {
+                ds <- packs_map.get(d._1)
+                depP <- latestP(ds, d._2)
+              } yield depP
+              depP match {
+                case Some(v) => {
+                  cache.update(d, v)
+                  depsx += v
+                }
+                case None => failed = true
+              }
+            }
+            j -= 1
+          }
+          if (!failed) array += PackageNode(pack, depsx.toArray.toSeq, true, Map.empty)
+        }
+      } catch {
+        case e: Throwable => {
+          logger.error(s"${e.getStackTrace().mkString("\n")}")
+        }
+      }
+    }
+    val package_nodes = array.toArray
+    logger.info(s"get count : ${package_nodes.length}")
+    val map = scala.collection.mutable.Map[PackageInfo, PackageNode](package_nodes.map(x => (x.src, x)): _*)
+    var count = 0
+    logger.info("start loop")
+    val b = new Breaks
+    b.breakable {
+      while (true) {
+        logger.info(s"count ${count}")
+        val ok = map.values.map(node => {
+          val updated = node.directed
+            .map(d => {
+              val v = map.get(d).fold(Map.empty[PackageInfo, Seq[PackageInfo]])(_.packages)
+              (d, (v.keys ++ v.values.flatten).toSeq)
+            })
+            .toMap
+          val result = node.packages == updated
+          map.update(node.src, node.copy(changeFromBefore = result, packages = updated))
+          result
+        })
+        if (ok.forall(x => x)) {
+          b.break()
+        }
+        logger.info(s"complete length: ${ok.filter(x => x).size}")
+        count += 1
+      }
+    }
+    logger.info("complete!")
+  }
+
+  import fpms.VersionCondition._
+  def latestP(vers: Seq[PackageInfo], condition: String): Option[PackageInfo] = {
+    for (i <- vers.length - 1 to 0 by -1) {
+      if (condition.valid(SemVer(vers(i).version))) {
+        return Some(vers(i))
+      }
+    }
+    None
   }
 
   def createGraph(first: PackageInfo) = {
@@ -187,7 +271,7 @@ class PackageRegisterer[F[_]](
               if (x._2.isEmpty) {
                 throw new Error(s"${x._1._1} not found")
               } else {
-                x._2.get.filter(_.version == latest(versions, x._1._2)).head
+                x._2.get.filter(_.version == latest(versions.get, x._1._2)).head
               }
             })
           )
@@ -278,7 +362,7 @@ class PackageRegisterer[F[_]](
                 targ.get.dep
                   .map(d => infoRepository.getVersions(d._1).map(z => (d, z)))
                   .runConcurrentry
-                  .map(_.toList.map(x => (x._1._1, latest(x._2.map(_.map(_.version)), x._1._2))))
+                  .map(_.toList.map(x => (x._1._1, latest(x._2.map(_.map(_.version)).get, x._1._2).get)))
                   .handleError(e => {
                     logger.info(s"$name $version dep_calc_failed_on_get_latest_version ${e.toString()}")
                     throw e
@@ -354,8 +438,10 @@ object PackageRegisterer {
   val SEMAPHORE_COUNT = Runtime.getRuntime().availableProcessors()
 
   import fpms.VersionCondition._
-  def latest(vers: Option[Seq[String]], condition: String): String = {
-    vers.get.filter(ver => condition.valid(SemVer(ver))).seq.sortWith((x, y) => SemVer(x) > SemVer(y)).head
+  def latest(vers: Seq[String], condition: String): Option[String] = {
+    Try {
+      vers.filter(ver => condition.valid(SemVer(ver))).seq.sortWith((x, y) => SemVer(x) > SemVer(y)).headOption
+    }.getOrElse(None)
   }
 
   implicit class RunConcurrentry[F[_], A](val src: TraversableOnce[F[A]])(implicit
@@ -364,6 +450,13 @@ object PackageRegisterer {
   ) {
     def runConcurrentry = src.toList.parSequence
   }
+
+  case class PackageNode(
+      src: PackageInfo,
+      directed: Seq[PackageInfo],
+      changeFromBefore: Boolean,
+      packages: Map[PackageInfo, Seq[PackageInfo]]
+  )
 
   case class Node(
       src: PackageInfo,

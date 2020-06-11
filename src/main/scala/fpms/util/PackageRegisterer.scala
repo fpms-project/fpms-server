@@ -31,13 +31,16 @@ class PackageRegisterer[F[_]](
   private val registerStopper =
     F.toIO(MVar.of[F, Map[String, MVar[F, Option[Map[String, Seq[PackageInfoBase]]]]]](Map.empty)).unsafeRunSync()
   private val pack_convert =
-    packs.flatMap(r => r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))
+    packs
+      .flatMap(r =>
+        r.versions
+          .map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty)))
+      )
+      .toArray
   private val packs_map: Map[String, Seq[PackageInfo]] =
     packs.map(r => (r.name, r.versions.map(v => PackageInfo(r.name, v.version, v.dep.getOrElse(Map.empty))))).toMap
 
   def registerPackages(): F[Unit] = {
-    val pack_nodep = pack_convert.filter(_.dep.isEmpty)
-    val pack_dep = pack_convert.filter(_.dep.nonEmpty)
     logger.info(s"package length: ${pack_convert.length}")
     logger.info(s"package type: ${packs_map.size}")
     algo()
@@ -69,11 +72,15 @@ class PackageRegisterer[F[_]](
     logger.info("call algo")
     val cache = scala.collection.mutable.Map.empty[(String, String), PackageInfo]
     var array = scala.collection.mutable.ArrayBuffer.empty[PackageNode]
+    array.sizeHint(pack_convert.length)
     for (i <- 0 to pack_convert.length - 1) {
+      if (i % 100000 == 0) {
+        logger.info(s"count: ${i}, length: ${array.size}")
+      }
       val pack = pack_convert(i)
       try {
         if (pack.dep.isEmpty) {
-          array += PackageNode(pack, Seq.empty, true, Map.empty)
+          array += PackageNode(pack, Seq.empty, false, Map.empty)
         } else {
           val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
           var failed = false

@@ -9,6 +9,7 @@ case class PackageInfo(name: String, version: String, dep: Map[String, String]) 
       case _              => false
     }
   def base = PackageInfoBase(name, version)
+  override def hashCode = name.## + version.##
 }
 
 object PackageInfo {

@@ -68,12 +68,8 @@ class PackageRegisterer[F[_]](
   def algo() {
     logger.info("call algo")
     val cache = scala.collection.mutable.Map.empty[(String, String), PackageInfo]
-    val array = scala.collection.mutable.ArrayBuffer.empty[PackageNode]
-    // それぞれのパッケージをNodeに変換する
-    for (i <- 0 to pack_convert.size - 1) {
-      if (i % 100000 == 0) {
-        logger.info(s"count : ${i}, length: ${array.size}")
-      }
+    var array = scala.collection.mutable.ArrayBuffer.empty[PackageNode]
+    for (i <- 0 to pack_convert.length - 1) {
       val pack = pack_convert(i)
       try {
         if (pack.dep.isEmpty) {
@@ -109,6 +105,7 @@ class PackageRegisterer[F[_]](
         }
       }
     }
+
     val package_nodes = array.toArray
     logger.info(s"get count : ${package_nodes.length}")
     val map = scala.collection.mutable.Map[PackageInfo, PackageNode](package_nodes.map(x => (x.src, x)): _*)

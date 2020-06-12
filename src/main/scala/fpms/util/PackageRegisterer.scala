@@ -24,6 +24,7 @@ class PackageRegisterer[F[_]](
     var packs: Seq[RootInterface]
 )(implicit F: ConcurrentEffect[F], P: Parallel[F], timer: Timer[F], cs: ContextShift[F]) {
 
+  /*
   import PackageRegisterer._
 
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -45,27 +46,6 @@ class PackageRegisterer[F[_]](
     logger.info(s"package type: ${packs_map.size}")
     algo()
     F.pure(())
-    /*
-    for {
-      // パッケージのすべての基本情報を保存
-      _ <-
-        packs
-          .map(v =>
-            if (v.versions.nonEmpty)
-              infoRepository.storeVersions(
-                v.versions.map(x => PackageInfo(v.name, x.version, x.dep.getOrElse(Map.empty)))
-              )
-            else F.unit // ないことがあるらしい……。
-          )
-          .runConcurrentry
-      _ <- F.pure(logger.info("added all package version"))
-      // 一つも依存関係がないバージョンしかないパッケージについて依存関係を保存
-      _ <- alldepRepo.storeMultiEmpty(pack_nodep.map(_.base))
-      _ <- F.pure(logger.info("added simple packages"))
-    } yield {
-      algo()
-    }
-     */
   }
 
   def algo() {
@@ -83,6 +63,7 @@ class PackageRegisterer[F[_]](
           array += PackageNode(pack, Seq.empty, false, Map.empty)
         } else {
           val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+          depsx.sizeHint(pack.dep.size)
           var failed = false
           var j = pack.dep.size - 1
           while (!failed && j > -1) {
@@ -435,6 +416,7 @@ class PackageRegisterer[F[_]](
     val error = new CancellationException(after.toString)
     timeoutTo(fa, after, F.raiseError(error))
   }
+  */
 }
 
 object PackageRegisterer {

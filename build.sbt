@@ -40,7 +40,7 @@ lazy val root = (project in file(".")).settings(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
   scalacOptions := defaultscalacOptions,
-  javaOptions in Runtime += "-Dlog4j2.debug"
+  javaOptions in Runtime ++= Seq("-Dlog4j2.debug","-XX:+UseG1GC")
 )
 
 lazy val http4sDeps = Seq(
@@ -84,5 +84,5 @@ lazy val defaultscalacOptions = Seq(
   "-feature",
   "-Ypartial-unification",
   "-Xfatal-warnings",
-  "log4j2.debug"
+  "log4j2.debug",
 )

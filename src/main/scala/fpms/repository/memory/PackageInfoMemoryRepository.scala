@@ -13,16 +13,16 @@ class PackageInfoMemoryRepository[F[_]](
 
   override def store(info: PackageInfo): F[Unit] = {
     for {
-      v <- depMap.take.map(v => v.updated(PackageInfoBase(info.name, info.version), info))
+      v <- depMap.take.map(v => v.updated(PackageInfoBase(info.name, info.version.toString()), info))
       _ <- depMap.put(v)
     } yield ()
   }
 
   override def storeVersions(infos: Seq[PackageInfo]): F[Unit] = {
     for {
-      s <- versionMap.take.map(v => v.updated(infos.head.name, infos.map(_.version)))
+      s <- versionMap.take.map(v => v.updated(infos.head.name, infos.map(_.version.toString())))
       _ <- versionMap.put(s)
-      x <- depMap.take.map(x => x ++ infos.map(v => (PackageInfoBase(v.name, v.version) -> v)))
+      x <- depMap.take.map(x => x ++ infos.map(v => (PackageInfoBase(v.name, v.version.toString()) -> v)))
       _ <- depMap.put(x)
     } yield ()
   }

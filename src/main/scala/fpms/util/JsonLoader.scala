@@ -11,10 +11,10 @@ import java.net.URLDecoder
 
 object JsonLoader {
 
-  val MAX_FILE_COUNT = 63
+  val MAX_FILE_COUNT = 60
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  def createLists(count: Int = MAX_FILE_COUNT): Seq[RootInterface] = {
+  def createLists(count: Int = MAX_FILE_COUNT): Array[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
     val charset = StandardCharsets.UTF_8.name
     for (i <- 0 to count) {
@@ -28,7 +28,7 @@ object JsonLoader {
       }
       lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, charset))))
     }
-    lists.flatten.flatten[RootInterface]
+    lists.flatten.flatten[RootInterface].toArray
   }
 
   private def filepath(count: Int): String =

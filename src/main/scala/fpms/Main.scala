@@ -15,6 +15,7 @@ object Main {
   def main(args: Array[String]) {
     logger.info("start log!")
     val packs = JsonLoader.createLists()
+    println("json loaded")
     logger.info("json loaded!")
     val pack_convert = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
@@ -35,7 +36,7 @@ object Main {
           case _: Throwable => Unit
         }
       }
-      packs_map += (pack.name -> seq)
+      packs_map += (pack.name -> seq.toSeq)
     }
     logger.info("call algo")
     algo(pack_convert.toArray, packs_map.toMap)
@@ -44,10 +45,8 @@ object Main {
   def algo(pack_convert: Array[PackageInfo], packs_map: Map[String, Seq[PackageInfo]]) {
     logger.info("call algo")
     val map = scala.collection.mutable.Map.empty[PackageInfo, PackageNode]
-    map.sizeHint(pack_convert.length)
     for (i <- 0 to pack_convert.length - 1) {
       if (i % 100000 == 0) {
-        System.gc();
         logger.info(s"count: ${i}, length: ${map.size}")
       }
       val pack = pack_convert(i)
@@ -59,8 +58,9 @@ object Main {
           depsx.sizeHint(pack.dep.size)
           var failed = false
           var j = pack.dep.size - 1
+          val seq = pack.dep.toSeq
           while (!failed && j > -1) {
-            val d = pack.dep.toSeq.apply(j)
+            val d = seq(j)
             var depP = for {
               ds <- packs_map.get(d._1)
               depP <- latestP(ds, d._2)

@@ -46,15 +46,15 @@ object Main {
       }
       packs_map += (pack.name -> seq.toSeq)
     }
-    val pack_convert_array = pack_convert.toArray
-    val packs_map_imu = packs_map.toMap
+    val array: Array[PackageInfo] = pack_convert.toArray
+    val packMap: Map[String, Seq[PackageInfo]] = packs_map.toMap
     val map = scala.collection.mutable.Map.empty[PackageInfoBase, PackageNode]
-    for (i <- 0 to pack_convert_array.length - 1) {
+    for (i <- 0 to array.length - 1) {
       if (i % 100000 == 0) {
         logger.info(s"count: ${i}, length: ${map.size}")
         System.gc()
       }
-      val pack = pack_convert_array(i)
+      val pack = array(i)
       try {
         if (pack.dep.isEmpty) {
           map.update(pack.base, PackageNode(pack, Seq.empty, false, scala.collection.mutable.Map.empty))
@@ -67,7 +67,7 @@ object Main {
           while (!failed && j > -1) {
             val d = seq(j)
             var depP = for {
-              ds <- packs_map_imu.get(d._1)
+              ds <- packMap.get(d._1)
               depP <- latestP(ds, d._2)
             } yield depP
             depP match {

@@ -30,3 +30,4 @@ jsons/*
 
 .metals/
 .bloop/
+!logs/gc/.gitkeep

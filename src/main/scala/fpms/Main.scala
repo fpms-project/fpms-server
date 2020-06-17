@@ -10,26 +10,33 @@ import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
 import semver.ranges.Range
 import scala.util.Try
-object Main {
+object Fpms {
   private val logger = LoggerFactory.getLogger(this.getClass)
+  private val idmap = scala.collection.mutable.Map.empty[String, Int]
+  def pack_to_string(pack: PackageInfo) = s"${pack.name}@${pack.version.toString()}"
+  private var id = 0
+
   def main(args: Array[String]) {
+    logger.info(s"${Runtime.getRuntime().maxMemory()}")
     logger.info("start log!")
     val packs = JsonLoader.createLists()
-    println("json loaded")
-    logger.info("json loaded!")
-    val map = setup(packs)
+    val packs_map = setup1(packs)
+    val map = setup(packs_map)
     algo(map)
   }
 
-  def setup(packs: Array[RootInterface]): Map[PackageInfoBase, PackageNode] = {
-    val pack_convert = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+  def add_id(pack: PackageInfo): Unit = {
+    idmap.update(pack_to_string(pack), id)
+    id += 1
+  }
+
+  def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
+
+  def setup1(packs: Array[RootInterface]): Map[String, Seq[PackageInfo]] = {
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
-    packs_map.sizeHint(packs.size)
-    // あんまよくない
-    pack_convert.sizeHint(13300000)
+    // packs_map.sizeHint(packs.size)
     for (i <- 0 to packs.size - 1) {
       if (i % 100000 == 0) {
-        System.gc()
         logger.info(s"$i")
       }
       val pack = packs(i)
@@ -38,54 +45,58 @@ object Main {
         val d = pack.versions(j)
         try {
           val info = PackageInfo(pack.name, d.version, d.dep)
-          pack_convert += info
           seq += info
+          add_id(info)
         } catch {
           case _: Throwable => Unit
         }
       }
       packs_map += (pack.name -> seq.toSeq)
     }
-    val array: Array[PackageInfo] = pack_convert.toArray
-    val packMap: Map[String, Seq[PackageInfo]] = packs_map.toMap
-    val map = scala.collection.mutable.Map.empty[PackageInfoBase, PackageNode]
-    for (i <- 0 to array.length - 1) {
-      if (i % 100000 == 0) {
-        logger.info(s"count: ${i}, length: ${map.size}")
-        System.gc()
-      }
-      val pack = array(i)
-      try {
-        if (pack.dep.isEmpty) {
-          map.update(pack.base, PackageNode(pack, Seq.empty, false, scala.collection.mutable.Map.empty))
-        } else {
-          val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfoBase]
-          depsx.sizeHint(pack.dep.size)
-          var failed = false
-          var j = pack.dep.size - 1
-          val seq = pack.dep.toSeq
-          while (!failed && j > -1) {
-            val d = seq(j)
-            var depP = for {
-              ds <- packMap.get(d._1)
-              depP <- latestP(ds, d._2)
-            } yield depP
-            depP match {
-              case Some(v) => depsx += v.base
-              case None    => failed = true
+    return packs_map.toMap
+  }
+
+  def setup(packs_map: Map[String, Seq[PackageInfo]]): Map[Int, PackageNode] = {
+    val packs_map_array = packs_map.values.toArray
+    val map = scala.collection.mutable.Map.empty[Int, PackageNode]
+    logger.info(s"pack_array_length : ${packs_map_array.size}")
+    for (i <- 0 to packs_map_array.length - 1) {
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}")
+      val a = packs_map_array(i)
+      for (j <- 0 to a.length - 1) {
+        val pack = a(j)
+        val id = get_id(pack)
+        try {
+          if (pack.dep.isEmpty) {
+            map.update(id, PackageNode(pack, Seq.empty, false, scala.collection.mutable.Map.empty))
+            add_id(pack)
+          } else {
+            val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+            depsx.sizeHint(pack.dep.size)
+            var failed = false
+            var k = pack.dep.size - 1
+            val seq = pack.dep.toSeq
+            while (!failed && k > -1) {
+              val d = seq(k)
+              var depP = for {
+                ds <- packs_map.get(d._1)
+                depP <- latestP(ds, d._2)
+              } yield depP
+              depP match {
+                case Some(v) => depsx += v
+                case None    => failed = true
+              }
+              k -= 1
             }
-            j -= 1
+            if (!failed) {
+              map.update(id, PackageNode(pack, depsx.toArray.toSeq, true, scala.collection.mutable.Map.empty))
+              add_id(pack)
+            }
           }
-          if (!failed) {
-            map.update(
-              pack.base,
-              PackageNode(pack, depsx.toArray.toSeq, true, scala.collection.mutable.Map.empty)
-            )
+        } catch {
+          case e: Throwable => {
+            logger.error(s"${e.getStackTrace().mkString("\n")}")
           }
-        }
-      } catch {
-        case e: Throwable => {
-          logger.error(s"${e.getStackTrace().mkString("\n")}")
         }
       }
     }
@@ -94,7 +105,8 @@ object Main {
     map.toMap
   }
 
-  def algo(map: Map[PackageInfoBase, PackageNode]) {
+  def algo(map: Map[Int, PackageNode]) {
+    System.gc()
     logger.info(s"get count : ${map.size}")
     logger.info("start loop")
     var count = 0
@@ -102,13 +114,11 @@ object Main {
     var complete = false
     while (!complete) {
       complete = true
+      var total = 0
       var x = 0
       var skip = 0
       for (i <- 0 to maps.size - 1) {
-        if (i % 100000 == 0) {
-          logger.info(s"count $count , $i")
-          System.gc()
-        }
+        if (i % 1000000 == 0) logger.info(s"count $count , $i, total | $total")
         val node = maps(i)
         val deps = node.directed
         // 依存関係がない or 前回から変わっていない場合は無視
@@ -121,11 +131,13 @@ object Main {
           var change = false
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
-            val tar = map.get(d)
+            val id = get_id(d)
+            val tar = map.get(id)
             if (tar.isEmpty) {
-              node.packages.update(d, Set.empty)
+              node.packages.update(id, Set.empty)
             } else {
-              val arr = scala.collection.mutable.Set.empty[PackageInfoBase]
+              val arr = scala.collection.mutable.Set.empty[Int]
+              val x = arr
               val seqs = tar.get.packages.toArray
               for (k <- 0 to seqs.size - 1) {
                 val t = seqs(k)
@@ -133,8 +145,9 @@ object Main {
                 arr ++= t._2
               }
               val deparra = arr.toSet
-              if (node.packages.get(d).forall(z => z != deparra)) change = true
-              node.packages.update(d, deparra)
+              total += deparra.size
+              if (node.packages.get(id).forall(z => z != deparra)) change = true
+              node.packages.update(id, deparra)
             }
           }
           node.changeFromBefore = change
@@ -142,7 +155,7 @@ object Main {
           else x += 1
         }
       }
-      logger.info(s"count :$count, x: ${x}, skip: $skip")
+      logger.info(s"count :$count, x: ${x}, skip: $skip, total: $total")
       count += 1
     }
     logger.info("complete!")
@@ -163,9 +176,9 @@ object Main {
 
   case class PackageNode(
       src: PackageInfo,
-      directed: Seq[PackageInfoBase],
+      directed: Seq[PackageInfo],
       var changeFromBefore: Boolean,
-      packages: scala.collection.mutable.Map[PackageInfoBase, Set[PackageInfoBase]]
+      packages: scala.collection.mutable.Map[Int, Set[Int]]
   )
   /*
 

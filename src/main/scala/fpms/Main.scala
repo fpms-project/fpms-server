@@ -158,37 +158,4 @@ object Fpms {
       directed: Seq[Int],
       packages: scala.collection.mutable.Set[Int]
   )
-  /*
-
-  def temp: IO[ExitCode] = {
-    logger.info("start log!")
-    val packs = JsonLoader.createLists()
-    logger.info("json loaded!")
-    for {
-      repos <- getRepositories()
-      _ <- new PackageRegisterer[IO](repos._1, repos._2, repos._3, packs).registerPackages()
-    } yield ExitCode.Success
-  }
-
-  def getRepositories(): IO[
-    (
-        PackageInfoMemoryRepository[IO],
-        PackageDepRelationMemoryRepository[IO],
-        PackageAllDepMemoryRepository[IO]
-    )
-  ] = {
-    for {
-      c <- for {
-        c <- MVar.of[IO, Map[String, Seq[String]]](Map.empty)
-        d <- MVar.of[IO, Map[PackageInfoBase, PackageInfo]](Map.empty)
-      } yield new PackageInfoMemoryRepository[IO](c, d)
-      a <- for {
-        a <- MVar.of[IO, Map[PackageInfoBase, Map[String, Seq[PackageInfoBase]]]](Map.empty)
-      } yield new PackageAllDepMemoryRepository[IO](a)
-      b <- for {
-        b <- MVar.of[IO, Map[String, Seq[PackageInfoBase]]](Map.empty)
-      } yield new PackageDepRelationMemoryRepository[IO](b)
-    } yield (c, b, a)
-  }
-   */
 }

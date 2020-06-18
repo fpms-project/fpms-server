@@ -7,13 +7,14 @@ import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.net.URLEncoder
 import scala.io.Source
+import fpms.PackageInfo
 import java.net.URLDecoder
 
 object JsonLoader {
 
-  val MAX_FILE_COUNT = 60
+  val MAX_FILE_COUNT = 63
   private val logger = LoggerFactory.getLogger(this.getClass)
-
+  
   def createLists(count: Int = MAX_FILE_COUNT): Array[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
     val charset = StandardCharsets.UTF_8.name

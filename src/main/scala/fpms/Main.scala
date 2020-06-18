@@ -19,9 +19,7 @@ object Fpms {
   def main(args: Array[String]) {
     logger.info(s"${Runtime.getRuntime().maxMemory()}")
     logger.info("start log!")
-    val packs = JsonLoader.createLists()
-    val packs_map = setup1(packs)
-    val map = setup(packs_map)
+    val map = setup()
     algo(map)
   }
 
@@ -32,7 +30,8 @@ object Fpms {
 
   def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
 
-  def setup1(packs: Array[RootInterface]): Map[String, Seq[PackageInfo]] = {
+  def setup():  Map[Int, PackageNode] = {
+    val packs = JsonLoader.createLists()
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
     // packs_map.sizeHint(packs.size)
     for (i <- 0 to packs.size - 1) {
@@ -53,10 +52,6 @@ object Fpms {
       }
       packs_map += (pack.name -> seq.toSeq)
     }
-    return packs_map.toMap
-  }
-
-  def setup(packs_map: Map[String, Seq[PackageInfo]]): Map[Int, PackageNode] = {
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
     logger.info(s"pack_array_length : ${packs_map_array.size}")
@@ -68,9 +63,9 @@ object Fpms {
         val id = get_id(pack)
         try {
           if (pack.dep.isEmpty) {
-            map.update(id, PackageNode(pack, Seq.empty, false, scala.collection.mutable.Set.empty))
+            map.update(id, PackageNode(pack.base, Seq.empty, false, scala.collection.mutable.Set.empty))
           } else {
-            val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+            val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
             depsx.sizeHint(pack.dep.size)
             var failed = false
             var k = pack.dep.size - 1
@@ -82,13 +77,13 @@ object Fpms {
                 depP <- latestP(ds, d._2)
               } yield depP
               depP match {
-                case Some(v) => depsx += v
+                case Some(v) => depsx += get_id(v)
                 case None    => failed = true
               }
               k -= 1
             }
             if (!failed) {
-              map.update(id, PackageNode(pack, depsx.toArray.toSeq, true, scala.collection.mutable.Set.empty))
+              map.update(id, PackageNode(pack.base, depsx.toArray.toSeq, true, scala.collection.mutable.Set.empty))
             }
           }
         } catch {
@@ -127,10 +122,10 @@ object Fpms {
           skip += 1
         } else {
           var current = node.packages.size
+          node.packages ++= node.directed.toSet
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
-            val id = get_id(d)
-            val tar = map.get(id)
+            val tar = map.get(d)
             if (tar.isDefined) {
               node.packages ++= tar.get.packages
             }
@@ -165,8 +160,8 @@ object Fpms {
   }
 
   case class PackageNode(
-      src: PackageInfo,
-      directed: Seq[PackageInfo],
+      src: PackageInfoBase,
+      directed: Seq[Int],
       var changeFromBefore: Boolean,
       packages: scala.collection.mutable.Set[Int]
   )

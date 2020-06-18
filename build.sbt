@@ -98,3 +98,10 @@ lazy val defaultscalacOptions = Seq(
   "-Xfatal-warnings",
   "log4j2.debug"
 )
+
+assemblyMergeStrategy in assembly := {
+  case "META-INF/io.netty.versions.properties" => MergeStrategy.concat
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
+}

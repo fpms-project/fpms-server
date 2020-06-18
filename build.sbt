@@ -20,10 +20,13 @@ lazy val client = (project in file("client"))
   )
   .dependsOn(root)
 
+Compile / run / fork := true
+
 lazy val root = (project in file(".")).settings(
   name := "fpms",
   version := "0.1",
   scalaVersion := "2.12.10",
+  fork in Runtime := true,
   libraryDependencies ++= Seq(
     "org.specs2" %% "specs2-core" % Specs2Version % "test",
     "org.typelevel" %% "cats-effect" % "2.0.0",
@@ -35,12 +38,21 @@ lazy val root = (project in file(".")).settings(
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
     "co.fs2" %% "fs2-experimental" % "2.1.0",
     "dev.profunktor" %% "console4cats" % "0.8.0",
-    "io.monix" %% "monix" % "3.1.0"
+    "org.scala-graph" %% "graph-core" % "1.13.1"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
   scalacOptions := defaultscalacOptions,
-  javaOptions in Runtime += "-Dlog4j2.debug"
+)
+
+run / javaOptions := Seq(
+  "-verbose:gc.log",
+  "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
+  "-XX:+UseG1GC",
+  "-XX:MaxRAMPercentage=80",
+  "-XX:-UseCompressedOops",
+  "-XX:+HeapDumpOnOutOfMemoryError",
+  "-XX:HeapDumpPath=dump.log"
 )
 
 lazy val http4sDeps = Seq(
@@ -86,3 +98,10 @@ lazy val defaultscalacOptions = Seq(
   "-Xfatal-warnings",
   "log4j2.debug"
 )
+
+assemblyMergeStrategy in assembly := {
+  case "META-INF/io.netty.versions.properties" => MergeStrategy.concat
+  case x =>
+    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    oldStrategy(x)
+}

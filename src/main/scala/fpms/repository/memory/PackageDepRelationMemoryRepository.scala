@@ -5,14 +5,13 @@ import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
 import fpms.{PackageDepRelationRepository, PackageInfoBase}
 
-class PackageDepRelationMemoryRepository[F[_]](m: MVar[F, Map[String, Seq[PackageInfoBase]]])(
-    implicit F: ConcurrentEffect[F]
+class PackageDepRelationMemoryRepository[F[_]](m: MVar[F, Map[String, Seq[PackageInfoBase]]])(implicit
+    F: ConcurrentEffect[F]
 ) extends PackageDepRelationRepository[F] {
 
   override def add(name: String, info: PackageInfoBase): F[Unit] = {
     for {
-      v <-
-        m.take.map(ma => ma.updated(name, ma.getOrElse(name, Seq.empty[PackageInfoBase]) :+ info))
+      v <- m.take.map(ma => ma.updated(name, ma.getOrElse(name, Seq.empty[PackageInfoBase]) :+ info))
       _ <- m.put(v)
     } yield ()
   }
@@ -23,9 +22,7 @@ class PackageDepRelationMemoryRepository[F[_]](m: MVar[F, Map[String, Seq[Packag
   override def addMulti(target: Seq[(String, PackageInfoBase)]): F[Unit] = {
     for {
       v <- m.take.map(v =>
-        target
-          .map(x => (x._1, v.getOrElse(x._1, Seq.empty) :+ x._2))
-          .toMap[String, Seq[PackageInfoBase]] ++ v
+        target.map(x => (x._1, v.getOrElse(x._1, Seq.empty) :+ x._2)).toMap[String, Seq[PackageInfoBase]] ++ v
       )
       _ <- m.put(v)
     } yield ()

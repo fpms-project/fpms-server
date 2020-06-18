@@ -24,8 +24,11 @@ class PackageAllDepMemoryRepository[F[_]](
 
   override def storeMultiEmpty(b: Seq[PackageInfoBase]): F[Unit] = {
     for {
-      x <- m.take.map(_ ++ b.map((_, Map.empty[String, Seq[PackageInfoBase]])).toMap)
+      x <- m.take.map(_ ++ b.map(v => (v, Map.empty[String, Seq[PackageInfoBase]])).toMap)
       _ <- m.put(x)
     } yield ()
   }
+
+  override def count(): F[Int] = m.read.map(_.values.size)
+
 }

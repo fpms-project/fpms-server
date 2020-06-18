@@ -68,8 +68,7 @@ object Fpms {
         val id = get_id(pack)
         try {
           if (pack.dep.isEmpty) {
-            map.update(id, PackageNode(pack, Seq.empty, false, scala.collection.mutable.Map.empty))
-            add_id(pack)
+            map.update(id, PackageNode(pack, Seq.empty, false, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
             depsx.sizeHint(pack.dep.size)
@@ -89,8 +88,7 @@ object Fpms {
               k -= 1
             }
             if (!failed) {
-              map.update(id, PackageNode(pack, depsx.toArray.toSeq, true, scala.collection.mutable.Map.empty))
-              add_id(pack)
+              map.update(id, PackageNode(pack, depsx.toArray.toSeq, true, scala.collection.mutable.Set.empty))
             }
           }
         } catch {
@@ -128,31 +126,23 @@ object Fpms {
           x += 1
           skip += 1
         } else {
-          var change = false
+          var current = node.packages.size
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
             val id = get_id(d)
             val tar = map.get(id)
-            if (tar.isEmpty) {
-              node.packages.update(id, Set.empty)
-            } else {
-              val arr = scala.collection.mutable.Set.empty[Int]
-              val x = arr
-              val seqs = tar.get.packages.toArray
-              for (k <- 0 to seqs.size - 1) {
-                val t = seqs(k)
-                arr += t._1
-                arr ++= t._2
-              }
-              val deparra = arr.toSet
-              total += deparra.size
-              if (node.packages.get(id).forall(z => z != deparra)) change = true
-              node.packages.update(id, deparra)
+            if (tar.isDefined) {
+              node.packages ++= tar.get.packages
             }
           }
-          node.changeFromBefore = change
-          if (change) complete = false
-          else x += 1
+          total += node.packages.size
+          if (node.packages.size != current) {
+            node.changeFromBefore = true
+            complete = false
+          } else {
+            node.changeFromBefore = false
+            x += 1
+          }
         }
       }
       logger.info(s"count :$count, x: ${x}, skip: $skip, total: $total")
@@ -178,7 +168,7 @@ object Fpms {
       src: PackageInfo,
       directed: Seq[PackageInfo],
       var changeFromBefore: Boolean,
-      packages: scala.collection.mutable.Map[Int, Set[Int]]
+      packages: scala.collection.mutable.Set[Int]
   )
   /*
 

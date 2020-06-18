@@ -444,18 +444,4 @@ object PackageRegisterer {
       packages: Map[PackageInfo, Seq[PackageInfo]]
   )
 
-  case class Node(
-      src: PackageInfo,
-      changeFromBefore: Boolean,
-      fetchPackages: Boolean,
-      completeCalculate: Boolean,
-      packages: Map[String, Seq[PackageInfoBase]]
-  ) {
-    override def equals(other: Any) =
-      other match {
-        case that: Node => that.src.base == src.base
-        case _          => false
-      }
-  }
-
 }

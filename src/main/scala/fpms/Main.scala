@@ -63,7 +63,7 @@ object Fpms {
         val id = get_id(pack)
         try {
           if (pack.dep.isEmpty) {
-            map.update(id, PackageNode(pack.base, Seq.empty, false, scala.collection.mutable.Set.empty))
+            map.update(id, PackageNode(pack.base, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
             depsx.sizeHint(pack.dep.size)
@@ -83,7 +83,7 @@ object Fpms {
               k -= 1
             }
             if (!failed) {
-              map.update(id, PackageNode(pack.base, depsx.toArray.toSeq, true, scala.collection.mutable.Set.empty))
+              map.update(id, PackageNode(pack.base, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
             }
           }
         } catch {
@@ -109,7 +109,6 @@ object Fpms {
       complete = true
       var total = 0
       var x = 0
-      var skip = 0
       for (i <- 0 to maps.size - 1) {
         if (i % 1000000 == 0) logger.info(s"count $count , $i, total | $total")
         val node = maps(i)
@@ -117,9 +116,6 @@ object Fpms {
         // 依存関係がない or 前回から変わっていない場合は無視
         if (deps.size == 0) {
           x += 1
-        } else if (!node.changeFromBefore) {
-          x += 1
-          skip += 1
         } else {
           var current = node.packages.size
           node.packages ++= node.directed.toSet
@@ -132,15 +128,13 @@ object Fpms {
           }
           total += node.packages.size
           if (node.packages.size != current) {
-            node.changeFromBefore = true
             complete = false
           } else {
-            node.changeFromBefore = false
             x += 1
           }
         }
       }
-      logger.info(s"count :$count, x: ${x}, skip: $skip, total: $total")
+      logger.info(s"count :$count, x: ${x}, total: $total")
       count += 1
     }
     logger.info("complete!")
@@ -162,7 +156,6 @@ object Fpms {
   case class PackageNode(
       src: PackageInfoBase,
       directed: Seq[Int],
-      var changeFromBefore: Boolean,
       packages: scala.collection.mutable.Set[Int]
   )
   /*

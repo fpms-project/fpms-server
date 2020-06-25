@@ -35,9 +35,7 @@ object Fpms {
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
     // packs_map.sizeHint(packs.size)
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) {
-        logger.info(s"$i")
-      }
+      if (i % 100000 == 0) logger.info(s"$i")
       val pack = packs(i)
       val seq = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
       for (j <- 0 to pack.versions.size - 1) {
@@ -52,11 +50,14 @@ object Fpms {
       }
       packs_map += (pack.name -> seq.toSeq)
     }
+    var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
+    var hit = 0
+    var miss = 0
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}, hit ${hit} / miss ${miss}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
@@ -72,13 +73,24 @@ object Fpms {
             val seq = pack.dep.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
-              var depP = for {
-                ds <- packs_map.get(d._1)
-                depP <- latestP(ds, d._2)
-              } yield depP
-              depP match {
-                case Some(v) => depsx += get_id(v)
-                case None    => failed = true
+              val cache = depCache.get(d)
+              if (cache.isEmpty) {
+                miss += 1
+                var depP = for {
+                  ds <- packs_map.get(d._1)
+                  depP <- latestP(ds, d._2)
+                } yield depP
+                depP match {
+                  case Some(v) => {
+                    val id = get_id(v)
+                    depsx += id
+                    depCache.update(d, id)
+                  }
+                  case None => failed = true
+                }
+              } else {
+                hit += 1
+                depsx += cache.get
               }
               k -= 1
             }

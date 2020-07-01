@@ -2,14 +2,14 @@ package fpms
 
 import cats.effect.concurrent.MVar
 import cats.effect.concurrent.Semaphore
-import com.gilt.gfc.semver.SemVer
 import fpms.repository.memory.{PackageAllDepMemoryRepository, PackageDepRelationMemoryRepository}
 import fpms.repository.memoryexception.PackageInfoMemoryRepository
 import fpms.util.JsonLoader
 import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
-import semver.ranges.Range
 import scala.util.Try
+import com.github.sh4869.semver_parser.{Range, SemVer}
+
 object Fpms {
   private val logger = LoggerFactory.getLogger(this.getClass)
   private val idmap = scala.collection.mutable.Map.empty[String, Int]
@@ -161,12 +161,11 @@ object Fpms {
     logger.info("complete!")
   }
 
-  import fpms.VersionCondition._
   def latestP(vers: Seq[PackageInfo], condition: String): Option[PackageInfo] = {
     Try {
-      val range = Range.valueOf(condition)
+      val range = Range(condition)
       for (i <- vers.length - 1 to 0 by -1) {
-        if (range.satisfies(vers(i).version)) {
+        if (range.valid(vers(i).version)) {
           return Some(vers(i))
         }
       }

@@ -8,18 +8,6 @@ val LogbackVersion = "1.2.3"
 
 val Redis4CatsVersion = "0.9.6"
 
-lazy val client = (project in file("client"))
-  .settings(
-    name := "fmps-client",
-    version := "0.1.0",
-    scalaVersion := "2.12.10",
-    libraryDependencies ++= http4sDeps ++ CirceDeps,
-    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
-    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-    scalacOptions := defaultscalacOptions
-  )
-  .dependsOn(root)
-
 Compile / run / fork := true
 
 lazy val root = (project in file(".")).settings(

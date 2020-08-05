@@ -1,8 +1,9 @@
 package fpms
 
-import com.gilt.gfc.semver.SemVer
+
 import io.circe.Decoder
 import io.circe.Encoder
+import com.github.sh4869.semver_parser.SemVer
 
 case class PackageDepInfo(name: String, version: SemVer, dep: Map[String, SemVer])
 

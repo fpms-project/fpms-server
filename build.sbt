@@ -25,20 +25,20 @@ Compile / run / fork := true
 lazy val root = (project in file(".")).settings(
   name := "fpms",
   version := "0.1",
-  scalaVersion := "2.12.10",
+  scalaVersion := "2.12.11",
   fork in Runtime := true,
   libraryDependencies ++= Seq(
     "org.specs2" %% "specs2-core" % Specs2Version % "test",
     "org.typelevel" %% "cats-effect" % "2.0.0",
     "org.typelevel" %% "cats-core" % "2.0.0",
     "org.typelevel" %% "cats-mtl-core" % "0.7.0",
-    "com.gilt" %% "gfc-semver" % "0.0.5",
     "co.fs2" %% "fs2-core" % "2.1.0",
     "co.fs2" %% "fs2-io" % "2.1.0",
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
     "co.fs2" %% "fs2-experimental" % "2.1.0",
     "dev.profunktor" %% "console4cats" % "0.8.0",
-    "org.scala-graph" %% "graph-core" % "1.13.1"
+    "org.scala-graph" %% "graph-core" % "1.13.1",
+    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),

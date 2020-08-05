@@ -2,14 +2,14 @@ package fpms
 
 import cats.effect.concurrent.MVar
 import cats.effect.concurrent.Semaphore
-import com.gilt.gfc.semver.SemVer
 import fpms.repository.memory.{PackageAllDepMemoryRepository, PackageDepRelationMemoryRepository}
 import fpms.repository.memoryexception.PackageInfoMemoryRepository
 import fpms.util.JsonLoader
 import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
-import semver.ranges.Range
 import scala.util.Try
+import com.github.sh4869.semver_parser.{Range, SemVer}
+
 object Fpms {
   private val logger = LoggerFactory.getLogger(this.getClass)
   private val idmap = scala.collection.mutable.Map.empty[String, Int]
@@ -30,14 +30,12 @@ object Fpms {
 
   def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
 
-  def setup():  Map[Int, PackageNode] = {
+  def setup(): Map[Int, PackageNode] = {
     val packs = JsonLoader.createLists()
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
     // packs_map.sizeHint(packs.size)
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) {
-        logger.info(s"$i")
-      }
+      if (i % 100000 == 0) logger.info(s"$i")
       val pack = packs(i)
       val seq = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
       for (j <- 0 to pack.versions.size - 1) {
@@ -52,18 +50,21 @@ object Fpms {
       }
       packs_map += (pack.name -> seq.toSeq)
     }
+    var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
+    var hit = 0
+    var miss = 0
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}, hit ${hit} / miss ${miss}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
         val id = get_id(pack)
         try {
           if (pack.dep.isEmpty) {
-            map.update(id, PackageNode(pack.base, Seq.empty, scala.collection.mutable.Set.empty))
+            map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
             depsx.sizeHint(pack.dep.size)
@@ -72,18 +73,29 @@ object Fpms {
             val seq = pack.dep.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
-              var depP = for {
-                ds <- packs_map.get(d._1)
-                depP <- latestP(ds, d._2)
-              } yield depP
-              depP match {
-                case Some(v) => depsx += get_id(v)
-                case None    => failed = true
+              val cache = depCache.get(d)
+              if (cache.isEmpty) {
+                miss += 1
+                var depP = for {
+                  ds <- packs_map.get(d._1)
+                  depP <- latestP(ds, d._2)
+                } yield depP
+                depP match {
+                  case Some(v) => {
+                    val id = get_id(v)
+                    depsx += id
+                    depCache.update(d, id)
+                  }
+                  case None => failed = true
+                }
+              } else {
+                hit += 1
+                depsx += cache.get
               }
               k -= 1
             }
             if (!failed) {
-              map.update(id, PackageNode(pack.base, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
+              map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
             }
           }
         } catch {
@@ -104,8 +116,12 @@ object Fpms {
     logger.info("start loop")
     var count = 0
     val maps = map.values.toArray
+    var set = scala.collection.mutable.TreeSet.empty[Int]
     var complete = false
+    var first = true
     while (!complete) {
+      val check = set.toSet
+      set.clear()
       complete = true
       var total = 0
       var x = 0
@@ -121,14 +137,18 @@ object Fpms {
           node.packages ++= node.directed.toSet
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
-            val tar = map.get(d)
-            if (tar.isDefined) {
-              node.packages ++= tar.get.packages
+            // 更新されたやつだけ追加
+            if (first || check.contains(d)) {
+              val tar = map.get(d)
+              if (tar.isDefined) {
+                node.packages ++= tar.get.packages
+              }
             }
           }
           total += node.packages.size
           if (node.packages.size != current) {
             complete = false
+            set += node.src
           } else {
             x += 1
           }
@@ -136,16 +156,16 @@ object Fpms {
       }
       logger.info(s"count :$count, x: ${x}, total: $total")
       count += 1
+      first = false
     }
     logger.info("complete!")
   }
 
-  import fpms.VersionCondition._
   def latestP(vers: Seq[PackageInfo], condition: String): Option[PackageInfo] = {
     Try {
-      val range = Range.valueOf(condition)
+      val range = Range(condition)
       for (i <- vers.length - 1 to 0 by -1) {
-        if (range.satisfies(vers(i).version)) {
+        if (range.valid(vers(i).version)) {
           return Some(vers(i))
         }
       }
@@ -154,41 +174,8 @@ object Fpms {
   }
 
   case class PackageNode(
-      src: PackageInfoBase,
+      src: Int,
       directed: Seq[Int],
       packages: scala.collection.mutable.Set[Int]
   )
-  /*
-
-  def temp: IO[ExitCode] = {
-    logger.info("start log!")
-    val packs = JsonLoader.createLists()
-    logger.info("json loaded!")
-    for {
-      repos <- getRepositories()
-      _ <- new PackageRegisterer[IO](repos._1, repos._2, repos._3, packs).registerPackages()
-    } yield ExitCode.Success
-  }
-
-  def getRepositories(): IO[
-    (
-        PackageInfoMemoryRepository[IO],
-        PackageDepRelationMemoryRepository[IO],
-        PackageAllDepMemoryRepository[IO]
-    )
-  ] = {
-    for {
-      c <- for {
-        c <- MVar.of[IO, Map[String, Seq[String]]](Map.empty)
-        d <- MVar.of[IO, Map[PackageInfoBase, PackageInfo]](Map.empty)
-      } yield new PackageInfoMemoryRepository[IO](c, d)
-      a <- for {
-        a <- MVar.of[IO, Map[PackageInfoBase, Map[String, Seq[PackageInfoBase]]]](Map.empty)
-      } yield new PackageAllDepMemoryRepository[IO](a)
-      b <- for {
-        b <- MVar.of[IO, Map[String, Seq[PackageInfoBase]]](Map.empty)
-      } yield new PackageDepRelationMemoryRepository[IO](b)
-    } yield (c, b, a)
-  }
-   */
 }

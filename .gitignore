@@ -31,3 +31,8 @@ jsons/*
 .metals/
 .bloop/
 !logs/gc/.gitkeep
+
+logs/*
+!logs/.gitkeep
+
+.vscode

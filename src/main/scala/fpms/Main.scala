@@ -18,11 +18,12 @@ import org.http4s.implicits._
 import org.http4s.server.blaze._
 import java.io.PrintWriter
 import scala.concurrent.ExecutionContext.global
+import com.typesafe.config._
 
 object Fpms extends IOApp {
-  private val logger = LoggerFactory.getLogger(this.getClass)
+  private lazy val logger = LoggerFactory.getLogger(this.getClass)
 
-  val helloWorldService = HttpRoutes
+  lazy val helloWorldService = HttpRoutes
     .of[IO] {
       case GET -> Root / "hello" / name =>
         Ok(s"Hello, $name.")
@@ -30,11 +31,12 @@ object Fpms extends IOApp {
     .orNotFound
 
   def run(args: List[String]): IO[ExitCode] = {
+    val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
     val xa = Transactor.fromDriverManager[IO](
-      "org.postgresql.Driver",
-      "jdbc:postgresql:test",
-      "postgres",
-      "123456"
+      config.getString("driver"),
+      config.getString("url"),
+      config.getString("user"),
+      config.getString("pass")
     )
     val repo = new SourcePackageSqlRepository[IO](xa)
     if (args.get(0).exists(_ == "setup")) {

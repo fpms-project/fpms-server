@@ -9,11 +9,13 @@ import java.net.URLEncoder
 import scala.io.Source
 import fpms.PackageInfo
 import java.net.URLDecoder
+import com.typesafe.config.ConfigFactory
 
 object JsonLoader {
 
-  val MAX_FILE_COUNT = 0
-  private val logger = LoggerFactory.getLogger(this.getClass)
+  private lazy val logger = LoggerFactory.getLogger(this.getClass)
+  private lazy val config = ConfigFactory.load("app.conf").getConfig("json")
+  lazy val MAX_FILE_COUNT = config.getInt("filenum")
   
   def createLists(count: Int = MAX_FILE_COUNT): Array[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
@@ -33,7 +35,7 @@ object JsonLoader {
   }
 
   private def filepath(count: Int): String =
-    s"/Users/sh4869/.ghq/github.com/sh4869/fpms/jsons/$count.json"
+    s"${config.getString("jsondir")}$count.json"
 
   private def readFile(filename: String): String = {
     val source = Source.fromFile(filename)

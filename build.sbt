@@ -24,10 +24,8 @@ lazy val root = (project in file(".")).settings(
     "co.fs2" %% "fs2-io" % "2.1.0",
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
     "co.fs2" %% "fs2-experimental" % "2.1.0",
-    "dev.profunktor" %% "console4cats" % "0.8.0",
-    "org.scala-graph" %% "graph-core" % "1.13.1",
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
-    "mysql" % "mysql-connector-java" % "8.0.21"
+    "com.typesafe" % "config" % "1.4.0"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
@@ -61,9 +59,7 @@ lazy val CirceDeps = Seq(
 ).map(_ % CirceVersion)
 
 lazy val DoobieDeps = Seq(
-  // Start with this one
   "org.tpolecat" %% "doobie-core" % "0.8.8",
-  // And add any of these as needed
   "org.tpolecat" %% "doobie-h2" % "0.8.8", // H2 driver 1.4.200 + type mappings.
   "org.tpolecat" %% "doobie-hikari" % "0.8.8", // HikariCP transactor.
   "org.tpolecat" %% "doobie-postgres" % "0.8.8", // Postgres driver 42.2.9 + type mappings.

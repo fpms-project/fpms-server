@@ -3,6 +3,10 @@ package fpms
 import io.circe.{Decoder, Encoder}
 import com.github.sh4869.semver_parser.SemVer
 
+case class PackageInfoBase(name: String, version: String) {
+  override def toString: String = s"$name@$version"
+}
+
 case class PackageInfo(name: String, version: SemVer, dep: Map[String, String]) {
   override def equals(obj: Any): Boolean =
     obj match {

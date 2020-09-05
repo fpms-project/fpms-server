@@ -12,7 +12,7 @@ import java.net.URLDecoder
 
 object JsonLoader {
 
-  val MAX_FILE_COUNT = 63
+  val MAX_FILE_COUNT = 0
   private val logger = LoggerFactory.getLogger(this.getClass)
   
   def createLists(count: Int = MAX_FILE_COUNT): Array[RootInterface] = {
@@ -33,7 +33,7 @@ object JsonLoader {
   }
 
   private def filepath(count: Int): String =
-    s"/home/al16030/Repos/package-manager-server/jsons/$count.json"
+    s"/Users/sh4869/.ghq/github.com/sh4869/fpms/jsons/$count.json"
 
   private def readFile(filename: String): String = {
     val source = Source.fromFile(filename)

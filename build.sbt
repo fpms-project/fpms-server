@@ -1,6 +1,6 @@
-val Http4sVersion = "0.20.0"
+val Http4sVersion = "0.21.0"
 
-val CirceVersion = "0.11.1"
+val CirceVersion = "0.12.0"
 
 val Specs2Version = "4.1.0"
 
@@ -26,7 +26,8 @@ lazy val root = (project in file(".")).settings(
     "co.fs2" %% "fs2-experimental" % "2.1.0",
     "dev.profunktor" %% "console4cats" % "0.8.0",
     "org.scala-graph" %% "graph-core" % "1.13.1",
-    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3"
+    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
+    "mysql" % "mysql-connector-java" % "8.0.21"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
@@ -66,6 +67,7 @@ lazy val DoobieDeps = Seq(
   "org.tpolecat" %% "doobie-h2" % "0.8.8", // H2 driver 1.4.200 + type mappings.
   "org.tpolecat" %% "doobie-hikari" % "0.8.8", // HikariCP transactor.
   "org.tpolecat" %% "doobie-postgres" % "0.8.8", // Postgres driver 42.2.9 + type mappings.
+  "org.tpolecat" %% "doobie-postgres-circe" % "0.8.8", // Postgres driver 42.2.9 + type mappings.
   "org.tpolecat" %% "doobie-quill" % "0.8.8" // Support for Quill 3.4.10
 )
 

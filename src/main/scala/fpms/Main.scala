@@ -1,54 +1,103 @@
 package fpms
 
-import cats.effect.concurrent.MVar
+import io.circe._, io.circe.generic.auto._, io.circe.parser._, io.circe.syntax._
 import cats.effect.concurrent.Semaphore
-import fpms.repository.memory.{PackageAllDepMemoryRepository, PackageDepRelationMemoryRepository}
-import fpms.repository.memoryexception.PackageInfoMemoryRepository
 import fpms.util.JsonLoader
 import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
 import scala.util.Try
+import doobie._
+import doobie.implicits._
 import com.github.sh4869.semver_parser.{Range, SemVer}
+import fpms.repository.db.SourcePackageSqlRepository
+import cats.effect._
+import cats.implicits._
+import org.http4s.HttpRoutes
+import org.http4s.dsl.io._
+import org.http4s.implicits._
+import org.http4s.server.blaze._
+import java.io.PrintWriter
+import scala.concurrent.ExecutionContext.global
 
-object Fpms {
+object Fpms extends IOApp {
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val idmap = scala.collection.mutable.Map.empty[String, Int]
-  def pack_to_string(pack: PackageInfo) = s"${pack.name}@${pack.version.toString()}"
-  private var id = 0
 
-  def main(args: Array[String]) {
-    logger.info(s"${Runtime.getRuntime().maxMemory()}")
-    logger.info("start log!")
-    val map = setup()
-    algo(map)
+  val helloWorldService = HttpRoutes
+    .of[IO] {
+      case GET -> Root / "hello" / name =>
+        Ok(s"Hello, $name.")
+    }
+    .orNotFound
+
+  def run(args: List[String]): IO[ExitCode] = {
+    val xa = Transactor.fromDriverManager[IO](
+      "org.postgresql.Driver",
+      "jdbc:postgresql:test",
+      "postgres",
+      "123456"
+    )
+    val repo = new SourcePackageSqlRepository[IO](xa)
+    if (args.get(0).exists(_ == "setup")) {
+      logger.info("setup")
+      save(repo)
+      IO.unit.as(ExitCode.Success)
+      /*
+      val map = setup(repo)
+      algo(map)
+       */
+    } else {
+      val name = "a"
+      println(repo.findByDeps("a").unsafeRunSync())
+      BlazeServerBuilder[IO]
+        .bindHttp(8080, "localhost")
+        .withHttpApp(helloWorldService)
+        .serve
+        .compile
+        .drain
+        .as(ExitCode.Success)
+    }
   }
 
-  def add_id(pack: PackageInfo): Unit = {
-    idmap.update(pack_to_string(pack), id)
-    id += 1
-  }
-
-  def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
-
-  def setup(): Map[Int, PackageNode] = {
+  def save(repo: SourcePackageRepository[IO]) = {
     val packs = JsonLoader.createLists()
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
-    // packs_map.sizeHint(packs.size)
+    val l = packs
+      .map(pack =>
+        pack.versions
+          .map(x =>
+            Try { SemVer.parse(x.version) }
+              .getOrElse(None)
+              .map(_ =>
+                SourcePackageInfo(
+                  pack.name,
+                  x.version,
+                  x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson
+                )
+              )
+          )
+          .toList
+          .flatten
+      )
+      .flatten
+      .toList
+    new PrintWriter("test.sql") {
+      write(s"insert into package (name, version, deps, deps_latest) values ${l
+        .map(x => s"('${x.name}', '${x.version}', '${x.deps.toString()}', '{}')")
+        .mkString(",")}"); close
+    }
+    // repo.insertMultiStream(l)
+  }
+
+  def setup(repo: SourcePackageRepository[IO]): Map[Int, PackageNode] = {
+    val packs = JsonLoader.createLists()
+    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackage]]
+    logger.info(s"pack size of types : ${packs.size}")
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) logger.info(s"$i")
+      if (i % 10000 == 0) logger.info(s"$i")
       val pack = packs(i)
-      val seq = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
-      for (j <- 0 to pack.versions.size - 1) {
-        val d = pack.versions(j)
-        try {
-          val info = PackageInfo(pack.name, d.version, d.dep)
-          seq += info
-          add_id(info)
-        } catch {
-          case _: Throwable => Unit
-        }
-      }
-      packs_map += (pack.name -> seq.toSeq)
+      val l = pack.versions
+        .map(x => SourcePackageInfo(pack.name, x.version, x.dep.getOrElse(Map.empty[String, String]).asJson))
+        .toList
+      val ok = repo.insertMulti(l).unsafeRunSync()
     }
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
@@ -61,16 +110,17 @@ object Fpms {
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
-        val id = get_id(pack)
+        val id = pack.id
         try {
-          if (pack.dep.isEmpty) {
+          val deps = pack.getDeps.get
+          if (deps.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
-            depsx.sizeHint(pack.dep.size)
+            depsx.sizeHint(deps.size)
             var failed = false
-            var k = pack.dep.size - 1
-            val seq = pack.dep.toSeq
+            var k = deps.size - 1
+            val seq = deps.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
               val cache = depCache.get(d)
@@ -82,9 +132,8 @@ object Fpms {
                 } yield depP
                 depP match {
                   case Some(v) => {
-                    val id = get_id(v)
-                    depsx += id
-                    depCache.update(d, id)
+                    depsx += pack.id
+                    depCache.update(d, pack.id)
                   }
                   case None => failed = true
                 }
@@ -161,11 +210,11 @@ object Fpms {
     logger.info("complete!")
   }
 
-  def latestP(vers: Seq[PackageInfo], condition: String): Option[PackageInfo] = {
+  def latestP(vers: Seq[SourcePackage], condition: String): Option[SourcePackage] = {
     Try {
       val range = Range(condition)
       for (i <- vers.length - 1 to 0 by -1) {
-        if (range.valid(vers(i).version)) {
+        if (range.valid(SemVer(vers(i).version))) {
           return Some(vers(i))
         }
       }

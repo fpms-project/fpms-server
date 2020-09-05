@@ -19,17 +19,13 @@ object JsonLoader {
   
   def createLists(count: Int = MAX_FILE_COUNT): Array[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
-    val charset = StandardCharsets.UTF_8.name
     for (i <- 0 to count) {
       val src = readFile(filepath(i))
       val dec = decode[List[RootInterface]](src) match {
         case Right(v) => Some(v)
-        case Left(e) => {
-          logger.warn(s"error: $i, ${e.toString()}")
-          None
-        }
+        case Left(e) => None
       }
-      lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, charset))))
+      lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
     }
     lists.flatten.flatten[RootInterface].toArray
   }
@@ -42,16 +38,5 @@ object JsonLoader {
     val result = source.getLines.mkString
     source.close()
     result
-  }
-
-  private def parse(src: String): Option[List[RootInterface]] = {
-    val deco = decode[List[RootInterface]](src)
-    deco match {
-      case Right(v) => Some(v)
-      case Left(e) => {
-        logger.warn(s"${e.toString()}")
-        None
-      }
-    }
   }
 }

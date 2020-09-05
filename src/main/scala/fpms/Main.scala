@@ -104,11 +104,9 @@ object Fpms extends IOApp {
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
-    var hit = 0
-    var miss = 0
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}, hit ${hit} / miss ${miss}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
@@ -118,8 +116,7 @@ object Fpms extends IOApp {
           if (deps.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
-            val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
-            depsx.sizeHint(deps.size)
+            val depsx = new scala.collection.mutable.ArrayBuffer[Int](deps.size)
             var failed = false
             var k = deps.size - 1
             val seq = deps.toSeq
@@ -127,7 +124,6 @@ object Fpms extends IOApp {
               val d = seq(k)
               val cache = depCache.get(d)
               if (cache.isEmpty) {
-                miss += 1
                 var depP = for {
                   ds <- packs_map.get(d._1)
                   depP <- latestP(ds, d._2)
@@ -140,19 +136,14 @@ object Fpms extends IOApp {
                   case None => failed = true
                 }
               } else {
-                hit += 1
                 depsx += cache.get
               }
               k -= 1
             }
-            if (!failed) {
-              map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
-            }
+            if (!failed) map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
           }
         } catch {
-          case e: Throwable => {
-            logger.error(s"${e.getStackTrace().mkString("\n")}")
-          }
+          case e: Throwable => logger.error(s"${e.getStackTrace().mkString("\n")}")
         }
       }
     }
@@ -215,12 +206,10 @@ object Fpms extends IOApp {
   def latestP(vers: Seq[SourcePackage], condition: String): Option[SourcePackage] = {
     Try {
       val range = Range(condition)
-      for (i <- vers.length - 1 to 0 by -1) {
-        if (range.valid(SemVer(vers(i).version))) {
-          return Some(vers(i))
-        }
-      }
-      None
+      vers
+        .filter(x => range.valid(SemVer(x.version)))
+        .sortWith((a, b) => SemVer(a.version) > SemVer(b.version))
+        .headOption
     }.getOrElse(None)
   }
 

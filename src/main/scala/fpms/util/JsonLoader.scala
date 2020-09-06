@@ -16,14 +16,14 @@ object JsonLoader {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
   private lazy val config = ConfigFactory.load("app.conf").getConfig("json")
   lazy val MAX_FILE_COUNT = config.getInt("filenum")
-  
-  def createLists(count: Int = MAX_FILE_COUNT): Array[RootInterface] = {
+
+  def loadList(start: Int, end: Int): Array[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
-    for (i <- 0 to count) {
+    for (i <- start to end) {
       val src = readFile(filepath(i))
       val dec = decode[List[RootInterface]](src) match {
         case Right(v) => Some(v)
-        case Left(e) => None
+        case Left(e)  => None
       }
       lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
     }

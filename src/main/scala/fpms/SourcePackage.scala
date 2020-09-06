@@ -13,7 +13,7 @@ case class SourcePackage(id: Int, name: String, version: String, deps: Json, dep
   def getDepsLatest: Option[DepsLatest] = deps_latest.as[DepsLatest].toOption
 }
 
-case class SourcePackageInfo(name: String, version: String, deps: Json)
+case class SourcePackageInfo(name: String, version: String, deps: Json, id: Int)
 
 case class LatestChild(version: String, id: Int)
 

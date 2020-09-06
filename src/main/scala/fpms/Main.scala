@@ -19,6 +19,7 @@ import org.http4s.server.blaze._
 import java.io.PrintWriter
 import scala.concurrent.ExecutionContext.global
 import com.typesafe.config._
+import scala.math.min
 
 object Fpms extends IOApp {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
@@ -32,6 +33,7 @@ object Fpms extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] = {
     val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
+    /*
     val xa = Transactor.fromDriverManager[IO](
       config.getString("driver"),
       config.getString("url"),
@@ -39,17 +41,18 @@ object Fpms extends IOApp {
       config.getString("pass")
     )
     val repo = new SourcePackageSqlRepository[IO](xa)
-    if (args.get(0).exists(_ == "setup")) {
-      logger.info("setup")
-      save(repo)
+     */
+    if (args.headOption.exists(_ == "save")) {
+      saveToJson();
       IO.unit.as(ExitCode.Success)
-      /*
-      val map = setup(repo)
+    } else if (args.get(0).exists(_ == "setup")) {
+      logger.info("setup")
+      // save(repo)
+      val map = setup()
       algo(map)
-       */
+      IO.unit.as(ExitCode.Success)
     } else {
       val name = "a"
-      println(repo.findByDeps("a").unsafeRunSync())
       BlazeServerBuilder[IO]
         .bindHttp(8080, "localhost")
         .withHttpApp(helloWorldService)
@@ -60,46 +63,54 @@ object Fpms extends IOApp {
     }
   }
 
-  def save(repo: SourcePackageRepository[IO]) = {
-    val packs = JsonLoader.createLists()
-    val l = packs
-      .map(pack =>
-        pack.versions
-          .map(x =>
-            Try { SemVer.parse(x.version) }
-              .getOrElse(None)
-              .map(_ =>
-                SourcePackageInfo(
-                  pack.name,
-                  x.version,
-                  x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson
-                )
-              )
-          )
-          .toList
-          .flatten
-      )
-      .flatten
-      .toList
-    new PrintWriter("test.sql") {
-      write(s"insert into package (name, version, deps, deps_latest) values ${l
-        .map(x => s"('${x.name}', '${x.version}', '${x.deps.toString()}', '{}')")
-        .mkString(",")}"); close
+  def saveToJson() = {
+    val max = 63
+    var id = 17123880
+    for (i <- 61 to 63) {
+      val start = i
+      val end = i
+      val packs = JsonLoader.loadList(start, end)
+      val l = packs
+        .map(pack =>
+          pack.versions
+            .map(x =>
+              Try { SemVer.parse(x.version) }
+                .getOrElse(None)
+                .map(_ => {
+                  id += 1
+                  SourcePackageInfo(
+                    pack.name,
+                    x.version,
+                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson,
+                    id
+                  )
+                })
+            )
+            .toList
+            .flatten
+        )
+        .flatten
+        .toList
+      new PrintWriter(s"jsons/with_id_${i - 30}.json") {
+        write(l.asJson.toString());
+        close()
+      }
     }
-    // repo.insertMultiStream(l)
   }
 
-  def setup(repo: SourcePackageRepository[IO]): Map[Int, PackageNode] = {
-    val packs = JsonLoader.createLists()
+  def setup(): Map[Int, PackageNode] = {
+    val packs = JsonLoader.loadList(0, 63)
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackage]]
     logger.info(s"pack size of types : ${packs.size}")
+    var id = 0
     for (i <- 0 to packs.size - 1) {
-      if (i % 10000 == 0) logger.info(s"$i")
       val pack = packs(i)
       val l = pack.versions
-        .map(x => SourcePackageInfo(pack.name, x.version, x.dep.getOrElse(Map.empty[String, String]).asJson))
+        .map(x => {
+          id += 1
+          SourcePackageInfo(pack.name, x.version, x.dep.getOrElse(Map.empty[String, String]).asJson, id)
+        })
         .toList
-      val ok = repo.insertMulti(l).unsafeRunSync()
     }
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray

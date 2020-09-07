@@ -33,7 +33,7 @@ object Fpms extends IOApp {
 
   def run(args: List[String]): IO[ExitCode] = {
     val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
-    /*
+
     val xa = Transactor.fromDriverManager[IO](
       config.getString("driver"),
       config.getString("url"),
@@ -41,14 +41,13 @@ object Fpms extends IOApp {
       config.getString("pass")
     )
     val repo = new SourcePackageSqlRepository[IO](xa)
-     */
     if (args.headOption.exists(_ == "save")) {
       saveToJson();
       IO.unit.as(ExitCode.Success)
     } else if (args.get(0).exists(_ == "setup")) {
       logger.info("setup")
       // save(repo)
-      val map = setup()
+      val map = setup(repo)
       algo(map)
       IO.unit.as(ExitCode.Success)
     } else {
@@ -65,7 +64,6 @@ object Fpms extends IOApp {
 
   def saveToJson() = {
     val max = 63
-    var id = 17123880
     for (i <- 61 to 63) {
       val start = i
       val end = i
@@ -77,12 +75,10 @@ object Fpms extends IOApp {
               Try { SemVer.parse(x.version) }
                 .getOrElse(None)
                 .map(_ => {
-                  id += 1
                   SourcePackageInfo(
                     pack.name,
                     x.version,
-                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson,
-                    id
+                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson
                   )
                 })
             )
@@ -98,8 +94,8 @@ object Fpms extends IOApp {
     }
   }
 
-  def setup(): Map[Int, PackageNode] = {
-    val packs = JsonLoader.loadList(0, 63)
+  def setup(repo: SourcePackageRepository[IO]): Map[Int, PackageNode] = {
+    val packs = JsonLoader.loadList(0, 10)
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackage]]
     logger.info(s"pack size of types : ${packs.size}")
     var id = 0
@@ -108,9 +104,11 @@ object Fpms extends IOApp {
       val l = pack.versions
         .map(x => {
           id += 1
-          SourcePackageInfo(pack.name, x.version, x.dep.getOrElse(Map.empty[String, String]).asJson, id)
+          SourcePackageInfo(pack.name, x.version, x.dep.getOrElse(Map.empty[String, String]).asJson)
         })
         .toList
+      val list = repo.insertMultiStream(l).compile.toList.unsafeRunSync()
+      packs_map += (pack.name -> list)
     }
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
@@ -125,6 +123,7 @@ object Fpms extends IOApp {
         try {
           val deps = pack.getDeps.get
           if (deps.isEmpty) {
+            repo.updateLatest(id, Map.empty[String, LatestChild].asJson)
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = new scala.collection.mutable.ArrayBuffer[Int](deps.size)

@@ -38,7 +38,6 @@ run / javaOptions := Seq(
   "-XX:+UseG1GC",
   "-XX:MaxRAMPercentage=80",
   "-XX:-UseCompressedOops",
-  "-XX:+HeapDumpOnOutOfMemoryError",
   "-XX:HeapDumpPath=dump.log"
 )
 

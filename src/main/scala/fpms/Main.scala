@@ -7,25 +7,18 @@ import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
 import scala.util.Try
 import com.github.sh4869.semver_parser.{Range, SemVer}
+import cats.effect.{IO, IOApp, ExitCode}
+import cats.implicits._
 
-object Fpms {
+object Fpms extends IOApp {
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val idmap = scala.collection.mutable.Map.empty[String, Int]
-  def pack_to_string(pack: PackageInfo) = s"${pack.name}@${pack.version.toString()}"
-  private var id = 0
 
-  def main(args: Array[String]) {
+  def run(args: List[String]): IO[ExitCode] = {
     logger.info("setup")
     val map = setup()
     algo(map)
+    IO.unit.as(ExitCode.Success)
   }
-
-  def add_id(pack: PackageInfo): Unit = {
-    idmap.update(pack_to_string(pack), id)
-    id += 1
-  }
-
-  def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
 
   def setup(): Map[Int, PackageNode] = {
     val packs = JsonLoader.loadList()

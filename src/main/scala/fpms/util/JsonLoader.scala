@@ -17,9 +17,10 @@ object JsonLoader {
   private lazy val config = ConfigFactory.load("app.conf").getConfig("json")
   lazy val MAX_FILE_COUNT = config.getInt("filenum")
 
-  def loadList(start: Int, end: Int): Array[RootInterface] = {
+  def loadList(start: Int = 0, end: Int = MAX_FILE_COUNT): Array[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
     for (i <- start to end) {
+      logger.info(s"json file: ${i}/${end}")
       val src = readFile(filepath(i))
       val dec = decode[List[RootInterface]](src) match {
         case Right(v) => Some(v)

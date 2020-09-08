@@ -8,6 +8,9 @@ import scala.util.control.Breaks
 import scala.util.Try
 import doobie._
 import doobie.implicits._
+import io.circe.generic.auto._
+import io.circe.syntax._
+import org.http4s.circe._
 import com.github.sh4869.semver_parser.{Range, SemVer}
 import fpms.repository.db.SourcePackageSqlRepository
 import cats.effect._
@@ -20,16 +23,22 @@ import java.io.PrintWriter
 import scala.concurrent.ExecutionContext.global
 import com.typesafe.config._
 import scala.math.min
+import org.slf4j.MarkerFactory
 
 object Fpms extends IOApp {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
 
-  lazy val helloWorldService = HttpRoutes
-    .of[IO] {
-      case GET -> Root / "hello" / name =>
-        Ok(s"Hello, $name.")
-    }
-    .orNotFound
+  def helloWorldService(map: Map[Int, PackageNode]) = {
+    implicit val userDecoder = jsonEncoderOf[IO, Option[PackageNode]]
+    HttpRoutes
+      .of[IO] {
+        case GET -> Root / "hello" / name =>
+          Ok(s"Hello, $name.")
+        case GET -> Root / "id" / IntVar(id) =>
+          Ok(map.get(id))
+      }
+      .orNotFound
+  }
 
   def run(args: List[String]): IO[ExitCode] = {
     val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
@@ -46,24 +55,23 @@ object Fpms extends IOApp {
       IO.unit.as(ExitCode.Success)
     } else if (args.get(0).exists(_ == "setup")) {
       logger.info("setup")
-      // save(repo)
-      val map = setup(repo)
+      val map = setup()
       algo(map)
-      IO.unit.as(ExitCode.Success)
-    } else {
-      val name = "a"
       BlazeServerBuilder[IO]
         .bindHttp(8080, "localhost")
-        .withHttpApp(helloWorldService)
+        .withHttpApp(helloWorldService(map))
         .serve
         .compile
         .drain
         .as(ExitCode.Success)
+    } else {
+      IO.unit.as(ExitCode.Success)
     }
   }
 
   def saveToJson() = {
     val max = 63
+    /*
     for (i <- 61 to 63) {
       val start = i
       val end = i
@@ -78,7 +86,8 @@ object Fpms extends IOApp {
                   SourcePackageInfo(
                     pack.name,
                     x.version,
-                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson
+                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson,
+                    0
                   )
                 })
             )
@@ -92,30 +101,36 @@ object Fpms extends IOApp {
         close()
       }
     }
+   */
   }
 
-  def setup(repo: SourcePackageRepository[IO]): Map[Int, PackageNode] = {
-    val packs = JsonLoader.loadList(0, 10)
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackage]]
+  def setup(): Map[Int, PackageNode] = {
+    val packs = JsonLoader.loadList()
+    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
     logger.info(s"pack size of types : ${packs.size}")
     var id = 0
     for (i <- 0 to packs.size - 1) {
+      if(i % 100000 === 0) logger.info(s"convert to List[SourcePcakgeInfo] : ${i}")
       val pack = packs(i)
       val l = pack.versions
         .map(x => {
           id += 1
-          SourcePackageInfo(pack.name, x.version, x.dep.getOrElse(Map.empty[String, String]).asJson)
+          Try {
+            Some(SourcePackageInfo(pack.name, SemVer(x.version), x.dep.getOrElse(Map.empty[String, String]).asJson, id))
+          }.getOrElse(None)
         })
         .toList
-      val list = repo.insertMultiStream(l).compile.toList.unsafeRunSync()
-      packs_map += (pack.name -> list)
+        .flatten
+      packs_map += (pack.name -> l)
     }
+    logger.info("complete convert to list")
+    var miss = 0
+    var hit = 0
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
-    logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size} | hit : ${hit}, miss : ${miss}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
@@ -123,7 +138,6 @@ object Fpms extends IOApp {
         try {
           val deps = pack.getDeps.get
           if (deps.isEmpty) {
-            repo.updateLatest(id, Map.empty[String, LatestChild].asJson)
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = new scala.collection.mutable.ArrayBuffer[Int](deps.size)
@@ -134,6 +148,7 @@ object Fpms extends IOApp {
               val d = seq(k)
               val cache = depCache.get(d)
               if (cache.isEmpty) {
+                miss += 1
                 var depP = for {
                   ds <- packs_map.get(d._1)
                   depP <- latestP(ds, d._2)
@@ -146,6 +161,7 @@ object Fpms extends IOApp {
                   case None => failed = true
                 }
               } else {
+                hit += 1
                 depsx += cache.get
               }
               k -= 1
@@ -172,13 +188,14 @@ object Fpms extends IOApp {
     var complete = false
     var first = true
     while (!complete) {
+      System.gc()
+      logger.info(s"start   lap ${count}")
       val check = set.toSet
       set.clear()
       complete = true
-      var total = 0
       var x = 0
       for (i <- 0 to maps.size - 1) {
-        if (i % 1000000 == 0) logger.info(s"count $count , $i, total | $total")
+        if (i % 1000000 == 0) logger.info(s"count $count , $i")
         val node = maps(i)
         val deps = node.directed
         // 依存関係がない or 前回から変わっていない場合は無視
@@ -197,7 +214,6 @@ object Fpms extends IOApp {
               }
             }
           }
-          total += node.packages.size
           if (node.packages.size != current) {
             complete = false
             set += node.src
@@ -206,20 +222,22 @@ object Fpms extends IOApp {
           }
         }
       }
-      logger.info(s"count :$count, x: ${x}, total: $total")
+      logger.info(s"complete lap ${count}, not updated: ${x}")
       count += 1
       first = false
     }
     logger.info("complete!")
   }
 
-  def latestP(vers: Seq[SourcePackage], condition: String): Option[SourcePackage] = {
+  def latestP(vers: Seq[SourcePackageInfo], condition: String): Option[SourcePackageInfo] = {
     Try {
       val range = Range(condition)
-      vers
-        .filter(x => range.valid(SemVer(x.version)))
-        .sortWith((a, b) => SemVer(a.version) > SemVer(b.version))
-        .headOption
+      for(i <- vers.length - 1 to 0 by -1){
+        if(range.valid(vers(i).version)) {
+          return Some(vers(i))
+        }
+      }
+      None
     }.getOrElse(None)
   }
 

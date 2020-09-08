@@ -12,91 +12,10 @@ import com.typesafe.config._
 object Fpms {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
 
-  def helloWorldService(map: Map[Int, PackageNode]) = {
-    import io.circe.generic.auto._
-    import io.circe.syntax._
-    import org.http4s.circe._
-    import org.http4s.HttpRoutes
-    import org.http4s.dsl.io._
-    import org.http4s.implicits._
-    import org.http4s.server.blaze._
-    import cats.effect.IO
-    implicit val userDecoder = jsonEncoderOf[IO, Option[PackageNode]]
-    HttpRoutes
-      .of[IO] {
-        case GET -> Root / "hello" / name =>
-          Ok(s"Hello, $name.")
-        case GET -> Root / "id" / IntVar(id) =>
-          Ok(map.get(id))
-      }
-      .orNotFound
-  }
-
   def main(args: Array[String]) {
     logger.info("setup !")
     val map = setup()
     algo(map)
-  }
-
-  /*
-  def run(args: List[String]): IO[ExitCode] = {
-    import cats.implicits._
-    if (args.headOption.exists(_ == "save")) {
-      saveToJson();
-      IO.unit.as(ExitCode.Success)
-    } else if (args.get(0).exists(_ == "setup")) {
-      logger.info("setup")
-      val map = setup()
-      algo(map)
-      /*
-      BlazeServerBuilder[IO]
-        .bindHttp(8080, "localhost")
-        .withHttpApp(helloWorldService(map))
-        .serve
-        .compile
-        .drain
-        .as(ExitCode.Success)
-       */
-      IO.unit.as(ExitCode.Success)
-    } else {
-      IO.unit.as(ExitCode.Success)
-    }
-  }
-  */
-
-  def saveToJson() = {
-    val max = 63
-    /*
-    for (i <- 61 to 63) {
-      val start = i
-      val end = i
-      val packs = JsonLoader.loadList(start, end)
-      val l = packs
-        .map(pack =>
-          pack.versions
-            .map(x =>
-              Try { SemVer.parse(x.version) }
-                .getOrElse(None)
-                .map(_ => {
-                  SourcePackageInfo(
-                    pack.name,
-                    x.version,
-                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson,
-                    0
-                  )
-                })
-            )
-            .toList
-            .flatten
-        )
-        .flatten
-        .toList
-      new PrintWriter(s"jsons/with_id_${i - 30}.json") {
-        write(l.asJson.toString());
-        close()
-      }
-    }
-   */
   }
 
   def setup(): Map[Int, PackageNode] = {

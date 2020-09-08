@@ -40,6 +40,16 @@ lazy val root = (project in file(".")).settings(
   javaOptions in Runtime += "-Dlog4j2.debug"
 )
 
+Compile / run / fork := true
+
+run / javaOptions := Seq(
+  "-verbose:gc.log",
+  "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
+  "-XX:+UseG1GC",
+  "-XX:MaxRAMPercentage=80",
+  "-XX:-UseCompressedOops",
+  "-XX:HeapDumpPath=dump.log"
+)
 
 lazy val http4sDeps = Seq(
   "org.http4s" %% "http4s-blaze-server",

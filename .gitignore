@@ -27,3 +27,8 @@ null/
 
 jsons/*
 !jsons/.gitkeep
+
+### Metals ###
+.metals/
+.bloop/
+project/metals.sbt

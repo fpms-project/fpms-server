@@ -1,63 +1,74 @@
 package fpms
 
+import cats.effect.concurrent.MVar
+import cats.effect.concurrent.Semaphore
 import fpms.util.JsonLoader
 import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
 import scala.util.Try
 import com.github.sh4869.semver_parser.{Range, SemVer}
-import fpms.repository.db.SourcePackageSqlRepository
-import java.io.PrintWriter
-import com.typesafe.config._
 
 object Fpms {
-  private lazy val logger = LoggerFactory.getLogger(this.getClass)
+  private val logger = LoggerFactory.getLogger(this.getClass)
+  private val idmap = scala.collection.mutable.Map.empty[String, Int]
+  def pack_to_string(pack: PackageInfo) = s"${pack.name}@${pack.version.toString()}"
+  private var id = 0
 
   def main(args: Array[String]) {
-    logger.info("setup !")
+    logger.info(s"${Runtime.getRuntime().maxMemory()}")
+    logger.info("start log!")
     val map = setup()
     algo(map)
   }
 
+  def add_id(pack: PackageInfo): Unit = {
+    idmap.update(pack_to_string(pack), id)
+    id += 1
+  }
+
+  def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
+
   def setup(): Map[Int, PackageNode] = {
     val packs = JsonLoader.loadList()
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
-    logger.info(s"pack size of types : ${packs.size}")
-    var id = 0
+    val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
+    // packs_map.sizeHint(packs.size)
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) logger.info(s"convert to List[SourcePcakgeInfo] : ${i}")
+      if (i % 100000 == 0) logger.info(s"$i")
       val pack = packs(i)
-      val l = pack.versions
-        .map(x => {
-          id += 1
-          Try {
-            Some(SourcePackageInfo(pack.name, SemVer(x.version), x.dep.getOrElse(Map.empty[String, String]), id))
-          }.getOrElse(None)
-        })
-        .toList
-        .flatten
-      packs_map += (pack.name -> l.toSeq)
+      val seq = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+      for (j <- 0 to pack.versions.size - 1) {
+        val d = pack.versions(j)
+        try {
+          val info = PackageInfo(pack.name, d.version, d.dep)
+          seq += info
+          add_id(info)
+        } catch {
+          case _: Throwable => Unit
+        }
+      }
+      packs_map += (pack.name -> seq.toSeq)
     }
-    logger.info("complete convert to list")
-    var miss = 0
-    var hit = 0
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
+    var hit = 0
+    var miss = 0
+    logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size} | hit : ${hit}, miss : ${miss}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}, hit ${hit} / miss ${miss}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
-        val id = pack.id
+        val id = get_id(pack)
         try {
-          if (pack.deps.isEmpty) {
+          if (pack.dep.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
-            depsx.sizeHint(pack.deps.size)
+            depsx.sizeHint(pack.dep.size)
             var failed = false
-            var k = pack.deps.size - 1
-            val seq = pack.deps.toSeq
+            var k = pack.dep.size - 1
+            val seq = pack.dep.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
               val cache = depCache.get(d)
@@ -69,8 +80,9 @@ object Fpms {
                 } yield depP
                 depP match {
                   case Some(v) => {
-                    depsx += pack.id
-                    depCache.update(d, pack.id)
+                    val id = get_id(v)
+                    depsx += id
+                    depCache.update(d, id)
                   }
                   case None => failed = true
                 }
@@ -80,10 +92,14 @@ object Fpms {
               }
               k -= 1
             }
-            if (!failed) map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
+            if (!failed) {
+              map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
+            }
           }
         } catch {
-          case e: Throwable => logger.error(s"${e.getStackTrace().mkString("\n")}")
+          case e: Throwable => {
+            logger.error(s"${e.getStackTrace().mkString("\n")}")
+          }
         }
       }
     }
@@ -102,14 +118,13 @@ object Fpms {
     var complete = false
     var first = true
     while (!complete) {
-      System.gc()
-      logger.info(s"start   lap ${count}")
       val check = set.toSet
       set.clear()
       complete = true
+      var total = 0
       var x = 0
       for (i <- 0 to maps.size - 1) {
-        if (i % 1000000 == 0) logger.info(s"count $count , $i")
+        if (i % 1000000 == 0) logger.info(s"count $count , $i, total | $total")
         val node = maps(i)
         val deps = node.directed
         // 依存関係がない or 前回から変わっていない場合は無視
@@ -128,6 +143,7 @@ object Fpms {
               }
             }
           }
+          total += node.packages.size
           if (node.packages.size != current) {
             complete = false
             set += node.src
@@ -136,14 +152,14 @@ object Fpms {
           }
         }
       }
-      logger.info(s"complete lap ${count}, not updated: ${x}")
+      logger.info(s"count :$count, x: ${x}, total: $total")
       count += 1
       first = false
     }
     logger.info("complete!")
   }
 
-  def latestP(vers: Seq[SourcePackageInfo], condition: String): Option[SourcePackageInfo] = {
+  def latestP(vers: Seq[PackageInfo], condition: String): Option[PackageInfo] = {
     Try {
       val range = Range(condition)
       for (i <- vers.length - 1 to 0 by -1) {

@@ -41,15 +41,6 @@ object Fpms extends IOApp {
   }
 
   def run(args: List[String]): IO[ExitCode] = {
-    val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
-
-    val xa = Transactor.fromDriverManager[IO](
-      config.getString("driver"),
-      config.getString("url"),
-      config.getString("user"),
-      config.getString("pass")
-    )
-    val repo = new SourcePackageSqlRepository[IO](xa)
     if (args.headOption.exists(_ == "save")) {
       saveToJson();
       IO.unit.as(ExitCode.Success)
@@ -116,7 +107,7 @@ object Fpms extends IOApp {
         .map(x => {
           id += 1
           Try {
-            Some(SourcePackageInfo(pack.name, SemVer(x.version), x.dep.getOrElse(Map.empty[String, String]).asJson, id))
+            Some(SourcePackageInfo(pack.name, SemVer(x.version), x.dep.getOrElse(Map.empty[String, String]), id))
           }.getOrElse(None)
         })
         .toList
@@ -136,11 +127,12 @@ object Fpms extends IOApp {
         val pack = a(j)
         val id = pack.id
         try {
-          val deps = pack.getDeps.get
+          val deps = pack.deps
           if (deps.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
-            val depsx = new scala.collection.mutable.ArrayBuffer[Int](deps.size)
+            val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
+            depsx.sizeHint(pack.deps.size)
             var failed = false
             var k = deps.size - 1
             val seq = deps.toSeq

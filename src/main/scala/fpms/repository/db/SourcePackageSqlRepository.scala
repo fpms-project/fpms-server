@@ -4,8 +4,11 @@ import fpms.SourcePackageRepository
 import doobie._
 import doobie.implicits._
 import doobie.postgres.circe.json.implicits._
+import doobie.Write
 import cats._
 import io.circe._
+import io.circe.syntax._
+import io.circe.generic.auto._
 import cats.implicits._
 import cats.effect.implicits._
 import cats.effect.Bracket
@@ -19,7 +22,8 @@ class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(implicit
     ev: Bracket[F, Throwable],
     F: ConcurrentEffect[F]
 ) extends SourcePackageRepository[F] {
-
+  implicit val w: Write[SourcePackage.Deps] = Write[(SourcePackage.Deps)].contramap(v => v)
+  
   def insert(name: String, version: String, deps: Json, deps_latest: Json): F[Int] =
     sql"insert into package (name, version, deps, deps_latest) values ($name, $version, $deps, $deps_latest)".update
       .withUniqueGeneratedKeys[Int]("id")

@@ -1,48 +1,53 @@
 package fpms
 
+import cats.effect.concurrent.MVar
+import cats.effect.concurrent.Semaphore
 import fpms.util.JsonLoader
 import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
 import scala.util.Try
 import com.github.sh4869.semver_parser.{Range, SemVer}
-import fpms.repository.db.SourcePackageSqlRepository
-import java.io.PrintWriter
-import com.typesafe.config._
+import cats.effect.{IO, IOApp, ExitCode}
+import cats.implicits._
 
-object Fpms {
-  private lazy val logger = LoggerFactory.getLogger(this.getClass)
+object Fpms extends IOApp {
+  private val logger = LoggerFactory.getLogger(this.getClass)
 
-  def main(args: Array[String]) {
-    logger.info("setup !")
+  def run(args: List[String]): IO[ExitCode] = {
+    logger.info("setup")
     val map = setup()
     algo(map)
+    IO.unit.as(ExitCode.Success)
   }
 
   def setup(): Map[Int, PackageNode] = {
     val packs = JsonLoader.loadList()
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
-    logger.info(s"pack size of types : ${packs.size}")
-    var id = 0
+    // packs_map.sizeHint(packs.size)
+    var id = 1
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) logger.info(s"convert to List[SourcePcakgeInfo] : ${i}")
+      if (i % 100000 == 0) logger.info(s"convert to List: $i")
       val pack = packs(i)
-      val l = pack.versions
-        .map(x => {
+      val seq = scala.collection.mutable.ArrayBuffer.empty[SourcePackageInfo]
+      for (j <- 0 to pack.versions.size - 1) {
+        val d = pack.versions(j)
+        try {
+          val info = SourcePackageInfo(pack.name, d.version, d.dep, id)
           id += 1
-          Try {
-            Some(SourcePackageInfo(pack.name, SemVer(x.version), x.dep.getOrElse(Map.empty[String, String]), id))
-          }.getOrElse(None)
-        })
-        .toList
-        .flatten
-      packs_map += (pack.name -> l.toSeq)
+          seq += info
+        } catch {
+          case _: Throwable => Unit
+        }
+      }
+      packs_map += (pack.name -> seq.toSeq)
     }
     logger.info("complete convert to list")
-    var miss = 0
-    var hit = 0
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
+    var hit = 0
+    var miss = 0
+    logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
       if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size} | hit : ${hit}, miss : ${miss}")
       val a = packs_map_array(i)
@@ -69,8 +74,8 @@ object Fpms {
                 } yield depP
                 depP match {
                   case Some(v) => {
-                    depsx += pack.id
-                    depCache.update(d, pack.id)
+                    depsx += v.id
+                    depCache.update(d, v.id)
                   }
                   case None => failed = true
                 }
@@ -80,10 +85,14 @@ object Fpms {
               }
               k -= 1
             }
-            if (!failed) map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
+            if (!failed) {
+              map.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
+            }
           }
         } catch {
-          case e: Throwable => logger.error(s"${e.getStackTrace().mkString("\n")}")
+          case e: Throwable => {
+            logger.error(s"${e.getStackTrace().mkString("\n")}")
+          }
         }
       }
     }
@@ -102,7 +111,6 @@ object Fpms {
     var complete = false
     var first = true
     while (!complete) {
-      System.gc()
       logger.info(s"start   lap ${count}")
       val check = set.toSet
       set.clear()

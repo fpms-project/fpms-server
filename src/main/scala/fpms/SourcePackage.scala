@@ -24,6 +24,12 @@ case class SourcePackageInfo(name: String, version: SemVer, deps: Deps, id: Int)
 case class LatestChild(version: String, id: Int)
 
 object SourcePackage {
+
   type Deps = Map[String, String]
   type DepsLatest = Map[String, LatestChild]
+}
+
+object SourcePackageInfo {
+  def apply(name: String, version: String, dep: Option[Map[String, String]], id: Int) =
+    new SourcePackageInfo(name, SemVer(version), dep.getOrElse(Map.empty[String, String]), id)
 }

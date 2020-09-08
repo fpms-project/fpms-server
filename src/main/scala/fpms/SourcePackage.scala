@@ -17,7 +17,8 @@ case class SourcePackage(id: Int, name: String, version: String, deps: Json, dep
 
 case class SourcePackageInfoSave(name: String, version: SemVer, desp: Json, id: Int)
 
-case class SourcePackageInfo(name: String, version: SemVer, deps: Deps, id: Int) {
+case class SourcePackageInfo(name: String, version: SemVer, deps: Json, id: Int) {
+  def getDeps: Deps = deps.as[Deps].toOption.getOrElse(Map.empty[String, String])
   def to: SourcePackageInfoSave = SourcePackageInfoSave(name, version, deps.asJson, id)
 }
 
@@ -31,5 +32,5 @@ object SourcePackage {
 
 object SourcePackageInfo {
   def apply(name: String, version: String, dep: Option[Map[String, String]], id: Int) =
-    new SourcePackageInfo(name, SemVer(version), dep.getOrElse(Map.empty[String, String]), id)
+    new SourcePackageInfo(name, SemVer(version), dep.getOrElse(Map.empty[String, String]).asJson, id)
 }

@@ -10,22 +10,12 @@ import com.github.sh4869.semver_parser.{Range, SemVer}
 
 object Fpms {
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val idmap = scala.collection.mutable.Map.empty[String, Int]
-  def pack_to_string(pack: PackageInfo) = s"${pack.name}@${pack.version.toString()}"
-  private var id = 0
 
   def main(args: Array[String]) {
     logger.info("setup")
     val map = setup()
     algo(map)
   }
-
-  def add_id(pack: PackageInfo): Unit = {
-    idmap.update(pack_to_string(pack), id)
-    id += 1
-  }
-
-  def get_id(pack: PackageInfo): Int = idmap.get(pack_to_string(pack)).getOrElse(-1)
 
   def setup(): Map[Int, PackageNode] = {
     val packs = JsonLoader.loadList()
@@ -62,14 +52,15 @@ object Fpms {
         val pack = a(j)
         val id = pack.id
         try {
-          if (pack.deps.isEmpty) {
+          val deps = pack.getDeps
+          if (deps.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
-            depsx.sizeHint(pack.deps.size)
+            depsx.sizeHint(deps.size)
             var failed = false
-            var k = pack.deps.size - 1
-            val seq = pack.deps.toSeq
+            var k = deps.size - 1
+            val seq = deps.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
               val cache = depCache.get(d)

@@ -1,98 +1,21 @@
 package fpms
 
-import io.circe._, io.circe.generic.auto._, io.circe.parser._, io.circe.syntax._
-import cats.effect.concurrent.Semaphore
 import fpms.util.JsonLoader
 import org.slf4j.LoggerFactory
 import scala.util.control.Breaks
 import scala.util.Try
-import doobie._
-import doobie.implicits._
-import io.circe.generic.auto._
-import io.circe.syntax._
-import org.http4s.circe._
 import com.github.sh4869.semver_parser.{Range, SemVer}
 import fpms.repository.db.SourcePackageSqlRepository
-import cats.effect._
-import cats.implicits._
-import org.http4s.HttpRoutes
-import org.http4s.dsl.io._
-import org.http4s.implicits._
-import org.http4s.server.blaze._
 import java.io.PrintWriter
-import scala.concurrent.ExecutionContext.global
 import com.typesafe.config._
-import scala.math.min
-import org.slf4j.MarkerFactory
 
-object Fpms extends IOApp {
+object Fpms {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
 
-  def helloWorldService(map: Map[Int, PackageNode]) = {
-    implicit val userDecoder = jsonEncoderOf[IO, Option[PackageNode]]
-    HttpRoutes
-      .of[IO] {
-        case GET -> Root / "hello" / name =>
-          Ok(s"Hello, $name.")
-        case GET -> Root / "id" / IntVar(id) =>
-          Ok(map.get(id))
-      }
-      .orNotFound
-  }
-
-  def run(args: List[String]): IO[ExitCode] = {
-    if (args.headOption.exists(_ == "save")) {
-      saveToJson();
-      IO.unit.as(ExitCode.Success)
-    } else if (args.get(0).exists(_ == "setup")) {
-      logger.info("setup")
-      val map = setup()
-      algo(map)
-      BlazeServerBuilder[IO]
-        .bindHttp(8080, "localhost")
-        .withHttpApp(helloWorldService(map))
-        .serve
-        .compile
-        .drain
-        .as(ExitCode.Success)
-    } else {
-      IO.unit.as(ExitCode.Success)
-    }
-  }
-
-  def saveToJson() = {
-    val max = 63
-    /*
-    for (i <- 61 to 63) {
-      val start = i
-      val end = i
-      val packs = JsonLoader.loadList(start, end)
-      val l = packs
-        .map(pack =>
-          pack.versions
-            .map(x =>
-              Try { SemVer.parse(x.version) }
-                .getOrElse(None)
-                .map(_ => {
-                  SourcePackageInfo(
-                    pack.name,
-                    x.version,
-                    x.dep.getOrElse(Map.empty[String, String]).map(x => (x._1, x._2.replace("'", ""))).asJson,
-                    0
-                  )
-                })
-            )
-            .toList
-            .flatten
-        )
-        .flatten
-        .toList
-      new PrintWriter(s"jsons/with_id_${i - 30}.json") {
-        write(l.asJson.toString());
-        close()
-      }
-    }
-   */
+  def main(args: Array[String]) {
+    logger.info("setup !")
+    val map = setup()
+    algo(map)
   }
 
   def setup(): Map[Int, PackageNode] = {
@@ -101,7 +24,7 @@ object Fpms extends IOApp {
     logger.info(s"pack size of types : ${packs.size}")
     var id = 0
     for (i <- 0 to packs.size - 1) {
-      if(i % 100000 === 0) logger.info(s"convert to List[SourcePcakgeInfo] : ${i}")
+      if (i % 100000 == 0) logger.info(s"convert to List[SourcePcakgeInfo] : ${i}")
       val pack = packs(i)
       val l = pack.versions
         .map(x => {
@@ -112,7 +35,7 @@ object Fpms extends IOApp {
         })
         .toList
         .flatten
-      packs_map += (pack.name -> l)
+      packs_map += (pack.name -> l.toSeq)
     }
     logger.info("complete convert to list")
     var miss = 0
@@ -127,15 +50,14 @@ object Fpms extends IOApp {
         val pack = a(j)
         val id = pack.id
         try {
-          val deps = pack.deps
-          if (deps.isEmpty) {
+          if (pack.deps.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
             depsx.sizeHint(pack.deps.size)
             var failed = false
-            var k = deps.size - 1
-            val seq = deps.toSeq
+            var k = pack.deps.size - 1
+            val seq = pack.deps.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
               val cache = depCache.get(d)
@@ -224,8 +146,8 @@ object Fpms extends IOApp {
   def latestP(vers: Seq[SourcePackageInfo], condition: String): Option[SourcePackageInfo] = {
     Try {
       val range = Range(condition)
-      for(i <- vers.length - 1 to 0 by -1){
-        if(range.valid(vers(i).version)) {
+      for (i <- vers.length - 1 to 0 by -1) {
+        if (range.valid(vers(i).version)) {
           return Some(vers(i))
         }
       }

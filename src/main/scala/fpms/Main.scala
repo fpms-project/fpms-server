@@ -7,7 +7,6 @@ import scala.util.Try
 import com.github.sh4869.semver_parser.{Range, SemVer}
 import fpms.repository.db.SourcePackageSqlRepository
 import cats.effect.{IOApp, IO, ExitCode}
-import cats.implicits._
 import java.io.PrintWriter
 import com.typesafe.config._
 
@@ -34,11 +33,13 @@ object Fpms {
   }
 
   def main(args: Array[String]) {
-    logger.info("setup")
+    logger.info("setup !")
     val map = setup()
     algo(map)
   }
+
   def run(args: List[String]): IO[ExitCode] = {
+    import cats.implicits._
     if (args.headOption.exists(_ == "save")) {
       saveToJson();
       IO.unit.as(ExitCode.Success)

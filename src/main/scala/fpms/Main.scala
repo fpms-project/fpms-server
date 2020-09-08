@@ -6,7 +6,6 @@ import scala.util.control.Breaks
 import scala.util.Try
 import com.github.sh4869.semver_parser.{Range, SemVer}
 import fpms.repository.db.SourcePackageSqlRepository
-import cats.effect.{IOApp, IO, ExitCode}
 import java.io.PrintWriter
 import com.typesafe.config._
 
@@ -21,6 +20,7 @@ object Fpms {
     import org.http4s.dsl.io._
     import org.http4s.implicits._
     import org.http4s.server.blaze._
+    import cats.effect.IO
     implicit val userDecoder = jsonEncoderOf[IO, Option[PackageNode]]
     HttpRoutes
       .of[IO] {
@@ -38,6 +38,7 @@ object Fpms {
     algo(map)
   }
 
+  /*
   def run(args: List[String]): IO[ExitCode] = {
     import cats.implicits._
     if (args.headOption.exists(_ == "save")) {
@@ -61,6 +62,7 @@ object Fpms {
       IO.unit.as(ExitCode.Success)
     }
   }
+  */
 
   def saveToJson() = {
     val max = 63

@@ -11,7 +11,7 @@ import cats.implicits._
 import java.io.PrintWriter
 import com.typesafe.config._
 
-object Fpms extends IOApp {
+object Fpms {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
 
   def helloWorldService(map: Map[Int, PackageNode]) = {
@@ -33,6 +33,11 @@ object Fpms extends IOApp {
       .orNotFound
   }
 
+  def main(args: Array[String]) {
+    logger.info("setup")
+    val map = setup()
+    algo(map)
+  }
   def run(args: List[String]): IO[ExitCode] = {
     if (args.headOption.exists(_ == "save")) {
       saveToJson();

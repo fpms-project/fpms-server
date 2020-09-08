@@ -29,18 +29,19 @@ object Fpms {
 
   def setup(): Map[Int, PackageNode] = {
     val packs = JsonLoader.loadList()
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
+    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
     // packs_map.sizeHint(packs.size)
+    var id = 1
     for (i <- 0 to packs.size - 1) {
       if (i % 100000 == 0) logger.info(s"convert to List: $i")
       val pack = packs(i)
-      val seq = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
+      val seq = scala.collection.mutable.ArrayBuffer.empty[SourcePackageInfo]
       for (j <- 0 to pack.versions.size - 1) {
         val d = pack.versions(j)
         try {
-          val info = PackageInfo(pack.name, d.version, d.dep)
+          val info = SourcePackageInfo(pack.name, d.version, d.dep, id)
+          id += 1
           seq += info
-          add_id(info)
         } catch {
           case _: Throwable => Unit
         }
@@ -59,16 +60,16 @@ object Fpms {
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
-        val id = get_id(pack)
+        val id = pack.id
         try {
-          if (pack.dep.isEmpty) {
+          if (pack.deps.isEmpty) {
             map.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
           } else {
             val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
-            depsx.sizeHint(pack.dep.size)
+            depsx.sizeHint(pack.deps.size)
             var failed = false
-            var k = pack.dep.size - 1
-            val seq = pack.dep.toSeq
+            var k = pack.deps.size - 1
+            val seq = pack.deps.toSeq
             while (!failed && k > -1) {
               val d = seq(k)
               val cache = depCache.get(d)
@@ -80,9 +81,8 @@ object Fpms {
                 } yield depP
                 depP match {
                   case Some(v) => {
-                    val id = get_id(v)
-                    depsx += id
-                    depCache.update(d, id)
+                    depsx += v.id
+                    depCache.update(d, v.id)
                   }
                   case None => failed = true
                 }
@@ -158,7 +158,7 @@ object Fpms {
     logger.info("complete!")
   }
 
-  def latestP(vers: Seq[PackageInfo], condition: String): Option[PackageInfo] = {
+  def latestP(vers: Seq[SourcePackageInfo], condition: String): Option[SourcePackageInfo] = {
     Try {
       val range = Range(condition)
       for (i <- vers.length - 1 to 0 by -1) {

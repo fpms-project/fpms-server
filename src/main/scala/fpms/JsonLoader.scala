@@ -1,21 +1,27 @@
 package fpms
 
 import cats.data.EitherT
+import cats.data.NonEmptyList
 import cats.effect.ConcurrentEffect
 import cats.effect.IO
+import cats.implicits._
 import cats.effect.concurrent.MVar
 import fs2.concurrent.Queue
 import io.circe.generic.auto._
 import io.circe.parser.decode
 import org.slf4j.LoggerFactory
 import scala.io.Source
+import cats.Parallel
 
-class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager: PackageUpdateSubscriberManager[IO])(implicit c: ConcurrentEffect[IO]) {
+class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager: PackageUpdateSubscriberManager[IO])(
+    implicit c: ConcurrentEffect[IO],
+    p: Parallel[IO]
+) {
   private val logger = LoggerFactory.getLogger(this.getClass)
   private var already: Seq[String] = Seq.empty
 
   def initialize(fileCount: Int = 1, max: Int = 5) = {
-    var list = createLists(fileCount).slice(0, 1000)
+    var list = createLists(fileCount)
     val firstList = list.filter(_.versions.forall(!_.dep.exists(_.nonEmpty)))
     var remainList: Seq[Seq[PackageInfo]] = Seq.empty
     firstList.foreach(v => {
@@ -31,19 +37,24 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       count += 1
       logger.info(s"count: $count")
       list = list.filter(e => !already.contains(e.name))
-      list.foreach(v => {
-        val result = addPackageContainer_(v)
-        packageUpdateSubscriberManager.addNewSubscriber(result._1).unsafeRunSync()
-        already = already :+ v.name
-        if (result._2.nonEmpty) {
-          remainList = remainList :+ result._2
+      list.zipWithIndex.foreach {
+        case (v, i) => {
+          val result = addPackageContainer_(v)
+          logger.info(s"$i/${list.size} add: ${v.name}, all:${v.versions.length},remain: ${result._2.length}")
+          packageUpdateSubscriberManager.addNewSubscriber(result._1).unsafeRunSync()
+          already = already :+ v.name
+          if (result._2.nonEmpty) {
+            remainList = remainList :+ result._2
+          }
         }
-      })
-      remainList = remainList.map(e => {
-        val result = addRemainPackages(e)
-        logger.info(s"add remain: ${e.head.name}, ${e.length} -> ${result.length}")
-        result
-      }).filter(_.nonEmpty)
+      }
+      remainList = remainList
+        .map(e => {
+          val result = addRemainPackages(e)
+          logger.info(s"add remain: ${e.head.name}, ${e.length} -> ${result.length}")
+          result
+        })
+        .filter(_.nonEmpty)
     }
   }
 
@@ -51,33 +62,44 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     val name = rootInterface.name
     val queue = Queue.bounded[IO, PackageUpdateEvent](100).unsafeRunSync()
     val topic = topicManager.addNewNamePackage(name).unsafeRunSync()
-    val containers = rootInterface.versions.reverse.map(e => {
-      val packageInfo = PackageInfo(name, e.version, e.dep)
-      val result = for {
-        latests <- packageUpdateSubscriberManager.getLatestsOfDeps(e.dep.getOrElse(Map.empty))
-        maps <- packageUpdateSubscriberManager.calcuratePackageDependeincies(latests)
-        d <- EitherT.right[Any](MVar.of[IO, Map[String, PackageInfo]](latests.mapValues(_.info)))
-        x <- EitherT.right[Any](MVar.of[IO, Map[String, Seq[PackageDepInfo]]](maps))
-      } yield new PackageDepsContainer[IO](packageInfo, d, x)
-      result.value.map(_.left map { _ => packageInfo })
-    }).map(_.unsafeRunSync())
+    val containers = rootInterface.versions.reverse
+      .map(e => {
+        val packageInfo = PackageInfo(name, e.version, e.dep)
+        val result = for {
+          latests <- packageUpdateSubscriberManager.getLatestsOfDeps(e.dep.getOrElse(Map.empty))
+          maps <- packageUpdateSubscriberManager.calcuratePackageDependeincies(latests)
+          d <- EitherT.right[Any](MVar.of[IO, Map[String, PackageInfo]](latests.mapValues(_.info)))
+          x <- EitherT.right[Any](MVar.of[IO, Map[String, Seq[PackageDepInfo]]](maps))
+        } yield new PackageDepsContainer[IO](packageInfo, d, x)
+        result.value.map(_.left map { _ => packageInfo })
+      })
+      .toList
+      .parSequence
+      .unsafeRunSync()
     val allDeps = rootInterface.versions.flatMap(_.dep.fold(Seq.empty[String])(_.keys.toSeq)).distinct
-    allDeps.filter(_ != rootInterface.name).foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
-    val mvar = MVar.of[IO, Set[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }.toSet).unsafeRunSync()
-    val alreadyS = MVar.of[IO, Set[String]](Set(allDeps:_*)).unsafeRunSync()
+    allDeps
+      .filter(_ != rootInterface.name)
+      .foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
+    val mvar =
+      MVar.of[IO, Set[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }.toSet).unsafeRunSync()
+    val alreadyS = MVar.of[IO, Set[String]](Set(allDeps: _*)).unsafeRunSync()
     val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
     subscriber.deleteAllinQueue()
     subscriber.start.unsafeRunAsyncAndForget()
     val remain = containers.collect { case Left(e) => e }
-    logger.info(s"add: ${rootInterface.name}, deps-length: ${allDeps.length}, all:${rootInterface.versions.length},remain: ${remain.length}")
     (subscriber, remain)
   }
 
   private def addRemainPackages(packages: Seq[PackageInfo]): Seq[PackageInfo] = {
-    packages.reverse.map(p => (p, packageUpdateSubscriberManager.addNewPackage(p))).map(v => v._2.value.unsafeRunSync().left map { _ => v._1 }).collect { case Left(e) => e }
+    packages.reverse
+      .map(p => packageUpdateSubscriberManager.addNewPackage(p).value.map(_.left.toOption.map(_ => p)))
+      .toList
+      .parSequence
+      .unsafeRunSync()
+      .flatten
   }
 
-  private def filepath(count: Int): String = s"/run/media/sh4869/SSD/result2/$count.json"
+  private def filepath(count: Int): String = s"/home/al16030/Repos/package-manager-server/jsons/$count.json"
 
   private def createLists(count: Int): Seq[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]

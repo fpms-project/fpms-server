@@ -22,8 +22,8 @@ object Main extends IOApp {
   override def run(arg: List[String]) = {
     val topicManager = createTopicManager.value.unsafeRunSync().right.get
     val manager = createPackageUpdateSubscriberManager(topicManager).value.unsafeRunSync().right.get
-    // val jsonLoader = new JsonLoader(topicManager,manager)
-    // jsonLoader.initialize()
+    val jsonLoader = new JsonLoader(topicManager,manager)
+    jsonLoader.initialize()
     for {
       _ <- manager.addNewPackage(PackageInfo("@fpms/z", "1.0.0", Map.empty[String, String])).value
       _ <- manager.addNewPackage(PackageInfo("@fpms/y", "1.0.0", Map.empty[String, String])).value

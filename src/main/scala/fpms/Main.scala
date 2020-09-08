@@ -15,8 +15,7 @@ object Fpms {
   private var id = 0
 
   def main(args: Array[String]) {
-    logger.info(s"${Runtime.getRuntime().maxMemory()}")
-    logger.info("start log!")
+    logger.info("setup")
     val map = setup()
     algo(map)
   }
@@ -33,7 +32,7 @@ object Fpms {
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[PackageInfo]]
     // packs_map.sizeHint(packs.size)
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) logger.info(s"$i")
+      if (i % 100000 == 0) logger.info(s"convert to List: $i")
       val pack = packs(i)
       val seq = scala.collection.mutable.ArrayBuffer.empty[PackageInfo]
       for (j <- 0 to pack.versions.size - 1) {
@@ -48,6 +47,7 @@ object Fpms {
       }
       packs_map += (pack.name -> seq.toSeq)
     }
+    logger.info("complete convert to list")
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     val map = scala.collection.mutable.Map.empty[Int, PackageNode]
@@ -55,7 +55,7 @@ object Fpms {
     var miss = 0
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}, hit ${hit} / miss ${miss}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size} | hit : ${hit}, miss : ${miss}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
@@ -118,13 +118,13 @@ object Fpms {
     var complete = false
     var first = true
     while (!complete) {
+      logger.info(s"start   lap ${count}")
       val check = set.toSet
       set.clear()
       complete = true
-      var total = 0
       var x = 0
       for (i <- 0 to maps.size - 1) {
-        if (i % 1000000 == 0) logger.info(s"count $count , $i, total | $total")
+        if (i % 1000000 == 0) logger.info(s"count $count , $i")
         val node = maps(i)
         val deps = node.directed
         // 依存関係がない or 前回から変わっていない場合は無視
@@ -143,7 +143,6 @@ object Fpms {
               }
             }
           }
-          total += node.packages.size
           if (node.packages.size != current) {
             complete = false
             set += node.src
@@ -152,7 +151,7 @@ object Fpms {
           }
         }
       }
-      logger.info(s"count :$count, x: ${x}, total: $total")
+      logger.info(s"complete lap ${count}, not updated: ${x}")
       count += 1
       first = false
     }

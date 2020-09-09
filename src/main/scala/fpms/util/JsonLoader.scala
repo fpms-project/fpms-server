@@ -35,7 +35,21 @@ object JsonLoader {
     lists.flatten.flatten[RootInterface].toArray
   }
 
-  def convertJson(start:Int = 0, end: Int=MAX_FILE_COUNT) {
+  def loadIdList(start: Int = 0, end: Int = MAX_FILE_COUNT): Array[RootInterfaceN] = {
+    var lists = Seq.empty[Option[List[RootInterfaceN]]]
+    for (i <- start to end) {
+      logger.info(s"json file: ${i}/${end}")
+      val src = readFile(s"${config.getString("idjsondir")}$i.json")
+      val dec = decode[List[RootInterfaceN]](src) match {
+        case Right(v) => Some(v)
+        case Left(e)  => None
+      }
+      lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
+    }
+    lists.flatten.flatten[RootInterfaceN].toArray
+  }
+
+  def convertJson(start: Int = 0, end: Int = MAX_FILE_COUNT) {
     var id = 0;
     for (i <- start to end) {
       val src = readFile(filepath(i))
@@ -48,11 +62,11 @@ object JsonLoader {
             close()
           }
         }
-        case Left(e)  => None
+        case Left(e) => None
       }
     }
   }
-  
+
   def convertList(array: List[RootInterface], start: Int): (List[RootInterfaceN], Int) = {
     var id = start
     val result = array.map(y =>

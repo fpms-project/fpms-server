@@ -47,10 +47,9 @@ object Fpms extends IOApp {
   }
 
   def setup(): Map[Int, PackageNode] = {
-    val packs = JsonLoader.loadList()
+    val packs = JsonLoader.loadIdList()
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
     // packs_map.sizeHint(packs.size)
-    var id = 1
     for (i <- 0 to packs.size - 1) {
       if (i % 100000 == 0) logger.info(s"convert to List: $i")
       val pack = packs(i)
@@ -58,8 +57,7 @@ object Fpms extends IOApp {
       for (j <- 0 to pack.versions.size - 1) {
         val d = pack.versions(j)
         try {
-          val info = SourcePackageInfo(pack.name, d.version, d.dep, id)
-          id += 1
+          val info = SourcePackageInfo(pack.name, d.version, d.dep, d.id)
           seq += info
         } catch {
           case _: Throwable => Unit

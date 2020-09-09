@@ -17,12 +17,12 @@ import cats.data.NonEmptyList
 import fpms.SourcePackage
 import fpms.SourcePackageInfo
 import fs2.Stream
+import fpms.SourcePackageInfoSave
 
 class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(implicit
     ev: Bracket[F, Throwable],
     F: ConcurrentEffect[F]
 ) extends SourcePackageRepository[F] {
-  implicit val w: Write[SourcePackage.Deps] = Write[(SourcePackage.Deps)].contramap(v => v)
   
   def insert(name: String, version: String, deps: Json, deps_latest: Json): F[Int] =
     sql"insert into package (name, version, deps, deps_latest) values ($name, $version, $deps, $deps_latest)".update
@@ -31,8 +31,8 @@ class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(implicit
 
   def insertMulti(packs: List[SourcePackageInfo]): F[List[SourcePackage]] = {
     val s = "insert into package (name, version, deps, deps_latest) values (?, ?, ?, \'{}\')"
-    Update[SourcePackageInfo](s)
-      .updateManyWithGeneratedKeys[SourcePackage]("id", "name", "version", "deps", "deps_latest")(packs)
+    Update[SourcePackageInfoSave](s)
+      .updateManyWithGeneratedKeys[SourcePackage]("id", "name", "version", "deps", "deps_latest")(packs.map(_.to))
       .transact(transactor)
       .compile
       .toList
@@ -40,8 +40,8 @@ class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(implicit
 
   def insertMultiStream(packs: List[SourcePackageInfo]): Stream[F, SourcePackage] = {
     val s = "insert into package (name, version, deps, deps_latest) values (?, ?, ?, \'{}\')"
-    Update[SourcePackageInfo](s)
-      .updateManyWithGeneratedKeys[SourcePackage]("id", "name", "version", "deps", "deps_latest")(packs)
+    Update[SourcePackageInfoSave](s)
+      .updateManyWithGeneratedKeys[SourcePackage]("id", "name", "version", "deps", "deps_latest")(packs.map(_.to))
       .transact(transactor)
   }
 

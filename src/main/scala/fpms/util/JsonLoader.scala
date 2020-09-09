@@ -10,6 +10,10 @@ import scala.io.Source
 import fpms.PackageInfo
 import java.net.URLDecoder
 import com.typesafe.config.ConfigFactory
+import fpms.RootInterfaceN
+import fpms.NpmPackageWithId
+import io.circe.syntax._
+import java.io.PrintWriter
 
 object JsonLoader {
 
@@ -29,6 +33,36 @@ object JsonLoader {
       lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
     }
     lists.flatten.flatten[RootInterface].toArray
+  }
+
+  def convertJson(start:Int = 0, end: Int=MAX_FILE_COUNT) {
+    var id = 0;
+    for (i <- start to end) {
+      val src = readFile(filepath(i))
+      decode[List[RootInterface]](src) match {
+        case Right(v) => {
+          val x = convertList(v, id)
+          id = x._2
+          new PrintWriter(s"jsons/with/${i}.json") {
+            write(x._1.asJson.toString())
+            close()
+          }
+        }
+        case Left(e)  => None
+      }
+    }
+  }
+  
+  def convertList(array: List[RootInterface], start: Int): (List[RootInterfaceN], Int) = {
+    var id = start
+    val result = array.map(y =>
+      RootInterfaceN(y.name, y.versions.map(v => {
+        val x = NpmPackageWithId(v.version, v.dep, id)
+        id += 1
+        x
+      }))
+    )
+    (result, id)
   }
 
   private def filepath(count: Int): String =

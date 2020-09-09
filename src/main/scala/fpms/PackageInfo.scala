@@ -1,6 +1,6 @@
 package fpms
 
-import com.gilt.gfc.semver.SemVer
+import com.github.sh4869.semver_parser.SemVer
 import io.circe.Decoder
 import io.circe.Encoder
 

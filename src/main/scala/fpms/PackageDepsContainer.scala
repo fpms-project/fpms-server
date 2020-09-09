@@ -3,6 +3,7 @@ package fpms
 import cats.effect._
 import cats.effect.concurrent.MVar
 import cats.implicits._
+import com.github.sh4869.semver_parser.Range
 
 class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String, PackageInfo]], depPackages: MVar[F, Map[String, Seq[PackageDepInfo]]])(
   implicit F: Concurrent[F]
@@ -20,7 +21,7 @@ class PackageDepsContainer[F[_]](val info: PackageInfo, dep: MVar[F, Map[String,
   } yield info +: mago
 
   def addNewVersion(newPack: PackageInfo, deps: Seq[PackageDepInfo]): F[Boolean] = {
-    if (info.dep.get(newPack.name).exists(_.valid(newPack.version))) {
+    if (info.dep.get(newPack.name).exists(x => Range(x).valid(newPack.version))) {
       dep.read.map(_.get(newPack.name)).flatMap {
         case Some(e) if e.version < newPack.version => for {
           m <- dep.take.map(_.updated(newPack.name, newPack))

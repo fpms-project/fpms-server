@@ -21,7 +21,7 @@ class TopicManager[F[_] : Concurrent](private val topicMap: MVar[F, Map[String, 
       })
       .collect { case Some(e) => e }
       .flatMap(input => {
-        input.subscribe(1000).through(queue.enqueue)
+        input.subscribe(3).through(queue.enqueue)
       }).compile.drain
 
   def addNewNamePackage(name: String) = for {

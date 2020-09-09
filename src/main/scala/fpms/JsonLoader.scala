@@ -12,6 +12,7 @@ import io.circe.parser.decode
 import org.slf4j.LoggerFactory
 import scala.io.Source
 import cats.Parallel
+import scala.util.Try
 
 class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager: PackageUpdateSubscriberManager[IO])(
     implicit c: ConcurrentEffect[IO],
@@ -25,7 +26,7 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     val firstList = list.filter(_.versions.forall(!_.dep.exists(_.nonEmpty)))
     var remainList: Seq[Seq[PackageInfo]] = Seq.empty
     firstList.foreach(v => {
-      val result = addPackageContainer_(v)
+      val result = addPackageContainer_(v).unsafeRunSync()
       packageUpdateSubscriberManager.addNewSubscriber(result._1).unsafeRunSync()
       already = already :+ v.name
       if (result._2.nonEmpty) {
@@ -37,17 +38,26 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
       count += 1
       logger.info(s"count: $count")
       list = list.filter(e => !already.contains(e.name))
-      list.zipWithIndex.foreach {
-        case (v, i) => {
-          val result = addPackageContainer_(v)
-          logger.info(s"$i/${list.size} add: ${v.name}, all:${v.versions.length},remain: ${result._2.length}")
-          packageUpdateSubscriberManager.addNewSubscriber(result._1).unsafeRunSync()
-          already = already :+ v.name
-          if (result._2.nonEmpty) {
-            remainList = remainList :+ result._2
-          }
-        }
-      }
+      list.zipWithIndex
+        .sliding(16, 16)
+        .foreach(r =>
+          r.map {
+            case (v, i) => {
+              for {
+                result <- addPackageContainer_(v)
+                _ <- IO(
+                  logger.info(s"$i/${list.size} add: ${v.name}, all:${v.versions.length},remain: ${result._2.length}")
+                )
+                _ <- packageUpdateSubscriberManager.addNewSubscriber(result._1)
+              } yield {
+                already = already :+ v.name
+                if (result._2.nonEmpty) {
+                  remainList = remainList :+ result._2
+                }
+              }
+            }
+          }.toList.parSequence_.unsafeRunSync()
+        )
       remainList = remainList
         .map(e => {
           val result = addRemainPackages(e)
@@ -58,36 +68,44 @@ class JsonLoader(topicManager: TopicManager[IO], packageUpdateSubscriberManager:
     }
   }
 
-  private def addPackageContainer_(rootInterface: RootInterface): (PackageUpdateSubscriber[IO], Seq[PackageInfo]) = {
+  private def addPackageContainer_(
+      rootInterface: RootInterface
+  ): IO[(PackageUpdateSubscriber[IO], Seq[PackageInfo])] = {
     val name = rootInterface.name
-    val queue = Queue.bounded[IO, PackageUpdateEvent](100).unsafeRunSync()
-    val topic = topicManager.addNewNamePackage(name).unsafeRunSync()
-    val containers = rootInterface.versions.reverse
-      .map(e => {
-        val packageInfo = PackageInfo(name, e.version, e.dep)
-        val result = for {
-          latests <- packageUpdateSubscriberManager.getLatestsOfDeps(e.dep.getOrElse(Map.empty))
-          maps <- packageUpdateSubscriberManager.calcuratePackageDependeincies(latests)
-          d <- EitherT.right[Any](MVar.of[IO, Map[String, PackageInfo]](latests.mapValues(_.info)))
-          x <- EitherT.right[Any](MVar.of[IO, Map[String, Seq[PackageDepInfo]]](maps))
-        } yield new PackageDepsContainer[IO](packageInfo, d, x)
-        result.value.map(_.left map { _ => packageInfo })
-      })
-      .toList
-      .parSequence
-      .unsafeRunSync()
     val allDeps = rootInterface.versions.flatMap(_.dep.fold(Seq.empty[String])(_.keys.toSeq)).distinct
-    allDeps
-      .filter(_ != rootInterface.name)
-      .foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
-    val mvar =
-      MVar.of[IO, Set[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }.toSet).unsafeRunSync()
-    val alreadyS = MVar.of[IO, Set[String]](Set(allDeps: _*)).unsafeRunSync()
-    val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
-    subscriber.deleteAllinQueue()
-    subscriber.start.unsafeRunAsyncAndForget()
-    val remain = containers.collect { case Left(e) => e }
-    (subscriber, remain)
+    for {
+      queue <- Queue.bounded[IO, PackageUpdateEvent](100)
+      topic <- topicManager.addNewNamePackage(name)
+      containers <- rootInterface.versions.reverse
+        .map(e => {
+          Try {
+            val packageInfo = PackageInfo(name, e.version, e.dep)
+            val result = for {
+              latests <- packageUpdateSubscriberManager.getLatestsOfDeps(e.dep.getOrElse(Map.empty))
+              maps <- packageUpdateSubscriberManager.calcuratePackageDependeincies(latests)
+              d <- EitherT.right[Any](MVar.of[IO, Map[String, PackageInfo]](latests.mapValues(_.info)))
+              x <- EitherT.right[Any](MVar.of[IO, Map[String, Seq[PackageDepInfo]]](maps))
+            } yield new PackageDepsContainer[IO](packageInfo, d, x)
+            Some(result.value.map(_.left map { _ => packageInfo }))
+          }.getOrElse(None)
+        })
+        .toList
+        .flatten
+        .parSequence
+      _ <- IO(
+        allDeps
+          .filter(_ != rootInterface.name)
+          .foreach(d => topicManager.subscribeTopic(d, queue).unsafeRunAsyncAndForget())
+      )
+      mvar <- MVar.of[IO, Set[PackageDepsContainer[IO]]](containers.collect { case Right(e) => e }.toSet)
+      alreadyS <- MVar.of[IO, Set[String]](Set(allDeps: _*))
+    } yield {
+      val subscriber = new PackageUpdateSubscriber[IO](name, mvar, queue, topic, alreadyS)
+      subscriber.deleteAllinQueue()
+      subscriber.start.unsafeRunAsyncAndForget()
+      val remain = containers.collect { case Left(e) => e }
+      (subscriber, remain)
+    }
   }
 
   private def addRemainPackages(packages: Seq[PackageInfo]): Seq[PackageInfo] = {

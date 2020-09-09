@@ -14,7 +14,7 @@ import org.http4s.circe._
 import org.http4s.dsl.io._
 import org.http4s.implicits._
 import scala.concurrent.duration._
-
+import com.github.sh4869.semver_parser.Range
 object Main extends IOApp {
 
   import org.http4s.server.blaze._
@@ -68,7 +68,7 @@ object Server {
   def server(manager: PackageUpdateSubscriberManager[IO]) = HttpRoutes.of[IO] {
     case GET -> Root / "get_deps" / name / condition =>
       for {
-        les <- manager.getDependencies(name, condition).value
+        les <- manager.getDependencies(name, Range(condition)).value
         resp <- Ok(toJson(les))
       } yield resp
     case GET -> Root / "counts" =>

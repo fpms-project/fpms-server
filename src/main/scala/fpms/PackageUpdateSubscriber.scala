@@ -10,6 +10,7 @@ import fs2.concurrent.Queue
 import fs2.concurrent.Topic
 import org.slf4j.LoggerFactory
 import scala.concurrent.ExecutionContext
+import com.github.sh4869.semver_parser.Range
 
 
 class PackageUpdateSubscriber[F[_]](
@@ -41,7 +42,7 @@ class PackageUpdateSubscriber[F[_]](
     containers.read.map(_.map(_.info).toSeq)
 
 
-  def getDependencies(condition: VersionCondition): F[Option[DepResult]] =
+  def getDependencies(condition: Range): F[Option[DepResult]] =
     getLatestVersion(condition).flatMap(_.fold(F.pure[Option[DepResult]](None))(e =>
       for {
         dep <- e.dependencies
@@ -50,8 +51,8 @@ class PackageUpdateSubscriber[F[_]](
     ))
 
 
-  def getLatestVersion(condition: VersionCondition): F[Option[PackageDepsContainer[F]]] =
-    containers.read.map(_.filter(e => condition.valid(e.info.version)).toSeq.sortWith((x, y) => x.info.version > y.info.version).headOption)
+  def getLatestVersion(range: Range): F[Option[PackageDepsContainer[F]]] =
+    containers.read.map(_.filter(e => range.valid(e.info.version)).toSeq.sortWith((x, y) => x.info.version > y.info.version).headOption)
 
   private def onAddNewVersion(event: AddNewVersion): Stream[F, Unit] =
     Stream.eval(F.pure(logger.info(s"[event]: Add new version in dep(${event.packageInfo.name}@${event.packageInfo.version.original}) at $name")))

@@ -1,4 +1,4 @@
-package fpms
+package fpms.json
 
 import io.circe.{Decoder, Encoder, Json}
 case class RootInterface(
@@ -6,9 +6,20 @@ case class RootInterface(
     versions: Seq[NpmPackageVersion]
 )
 
+case class RootInterfaceN(
+    name: String,
+    versions: Seq[NpmPackageWithId]
+)
+
 case class NpmPackageVersion(
     version: String,
     dep: Option[Map[String, String]]
+)
+
+case class NpmPackageWithId(
+  version: String,
+    dep: Option[Map[String, String]],
+    id: Int
 )
 
 object NpmPackageVersion {

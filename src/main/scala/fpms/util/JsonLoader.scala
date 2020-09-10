@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory
 import java.nio.charset.StandardCharsets
 import java.net.URLEncoder
 import scala.io.Source
-import fpms.PackageInfo
 import java.net.URLDecoder
 import com.typesafe.config.ConfigFactory
 import fpms.RootInterfaceN

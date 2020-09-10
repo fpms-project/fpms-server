@@ -3,7 +3,7 @@ CREATE TABLE package (
     version VARCHAR(255) NOT NULL,
     deps JSON,
     deps_latest JSON,
-    id SERIAL  NOT NULL,
+    id integer NOT NULL,
     UNIQUE(name, version),
     PRIMARY KEY (id)
 );

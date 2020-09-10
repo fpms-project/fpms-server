@@ -15,10 +15,10 @@ case class SourcePackage(id: Int, name: String, version: String, deps: Json, dep
   def getDepsLatest: Option[DepsLatest] = deps_latest.as[DepsLatest].toOption
 }
 
-case class SourcePackageInfoSave(name: String, version: SemVer, desp: Json, id: Int)
+case class SourcePackageInfoSave(name: String, version: String, desp: Json, id: Int)
 
 case class SourcePackageInfo(name: String, version: SemVer, deps: Deps, id: Int) {
-  def to: SourcePackageInfoSave = SourcePackageInfoSave(name, version, deps.asJson, id)
+  def to: SourcePackageInfoSave = SourcePackageInfoSave(name, version.original, deps.asJson, id)
 }
 
 case class LatestChild(version: String, id: Int)

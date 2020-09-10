@@ -29,20 +29,9 @@ class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(implicit
       .withUniqueGeneratedKeys[Int]("id")
       .transact(transactor)
 
-  def insertMulti(packs: List[SourcePackageInfo]): F[List[SourcePackage]] = {
-    val s = "insert into package (name, version, deps, deps_latest) values (?, ?, ?, \'{}\')"
-    Update[SourcePackageInfoSave](s)
-      .updateManyWithGeneratedKeys[SourcePackage]("id", "name", "version", "deps", "deps_latest")(packs.map(_.to))
-      .transact(transactor)
-      .compile
-      .toList
-  }
-
-  def insertMultiStream(packs: List[SourcePackageInfo]): Stream[F, SourcePackage] = {
-    val s = "insert into package (name, version, deps, deps_latest) values (?, ?, ?, \'{}\')"
-    Update[SourcePackageInfoSave](s)
-      .updateManyWithGeneratedKeys[SourcePackage]("id", "name", "version", "deps", "deps_latest")(packs.map(_.to))
-      .transact(transactor)
+  def insertMulti(packs: List[SourcePackageInfo]): F[Unit] = {
+      val s = "insert into package (name, version, deps, id, deps_latest) values (?, ?, ?, ?, \'{}\')" 
+      Update[SourcePackageInfoSave](s).updateMany(packs.map(_.to)).transact(transactor).as(Unit)
   }
 
   def updateLatest(name: String, version: String, depsLatest: Json): F[Unit] =

@@ -22,7 +22,5 @@ trait SourcePackageRepository[F[_]] {
 
   def updateLatest(id: Int, depsLatest: Json): F[Unit]
 
-  def insertMulti(packs: List[SourcePackageInfo]): F[List[SourcePackage]]
-
-  def insertMultiStream(packs: List[SourcePackageInfo]): Stream[F, SourcePackage]
+  def insertMulti(packs: List[SourcePackageInfo]): F[Unit]
 }

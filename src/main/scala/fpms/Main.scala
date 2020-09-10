@@ -11,6 +11,8 @@ import cats.effect.{IO, IOApp, ExitCode}
 import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.HttpRoutes
 import cats.implicits._
+import com.typesafe.config._
+import doobie._
 
 object Fpms extends IOApp {
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -33,7 +35,22 @@ object Fpms extends IOApp {
       .orNotFound
   }
 
+  def saveToDb() {
+    val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
+    val xa = Transactor.fromDriverManager[IO](
+      config.getString("driver"),
+      config.getString("url"),
+      config.getString("user"),
+      config.getString("pass")
+    )
+    val packs = JsonLoader.loadIdList()
+    util.SqlSaver.saveJson(packs, xa)
+  }
+
   def run(args: List[String]): IO[ExitCode] = {
+    if (args.headOption.exists(_ == "db")) {
+      saveToDb()
+    }
     logger.info("setup")
     val map = setup()
     algo(map)

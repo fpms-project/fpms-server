@@ -1,6 +1,5 @@
-package fpms.util
+package fpms.json
 
-import fpms.RootInterface
 import io.circe.generic.auto._
 import io.circe.parser.decode
 import org.slf4j.LoggerFactory
@@ -9,8 +8,6 @@ import java.net.URLEncoder
 import scala.io.Source
 import java.net.URLDecoder
 import com.typesafe.config.ConfigFactory
-import fpms.RootInterfaceN
-import fpms.NpmPackageWithId
 import io.circe.syntax._
 import java.io.PrintWriter
 

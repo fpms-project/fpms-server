@@ -1,4 +1,4 @@
-package fpms
+package fpms.json
 
 import io.circe.{Decoder, Encoder, Json}
 case class RootInterface(

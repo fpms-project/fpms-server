@@ -1,6 +1,7 @@
 package fpms.util
 
 import fpms._
+import fpms.json.RootInterfaceN
 import fpms.repository.db.SourcePackageSqlRepository
 import doobie._
 import doobie.implicits._

@@ -1,8 +1,10 @@
-package fpms
+package fpms.repository
 
 import io.circe.Json
 import cats.data.NonEmptyList
 import fs2.Stream
+import fpms.SourcePackage
+import fpms.SourcePackageInfo
 
 trait SourcePackageRepository[F[_]] {
 

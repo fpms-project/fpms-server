@@ -1,6 +1,6 @@
 package fpms.repository.db
 
-import fpms.SourcePackageRepository
+import fpms.repository.SourcePackageRepository
 import doobie._
 import doobie.implicits._
 import doobie.postgres.circe.json.implicits._

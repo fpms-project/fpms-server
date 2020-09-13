@@ -4,6 +4,7 @@ import org.slf4j.LoggerFactory
 import com.github.sh4869.semver_parser.Range
 import fpms.json.JsonLoader
 import scala.util.Try
+import fpms.SourcePackageInfo._
 
 class LocalDependencyCalculator extends DependencyCalculator {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
@@ -44,7 +45,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
     }
     packs_map.toMap
   }
-  
+
   private def setup(): Unit = {
     val packs_map = createMap()
     logger.info("complete convert to list")
@@ -71,7 +72,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
             if (cache.isEmpty) {
               var depP = for {
                 ds <- packs_map.get(d._1)
-                depP <- latestP(ds, d._2)
+                depP <- ds.latestInFits(d._2)
               } yield depP
               depP match {
                 case Some(v) => {
@@ -142,17 +143,5 @@ class LocalDependencyCalculator extends DependencyCalculator {
       first = false
     }
     logger.info("complete!")
-  }
-
-  private def latestP(vers: Seq[SourcePackageInfo], condition: String): Option[SourcePackageInfo] = {
-    Try {
-      val range = Range(condition)
-      for (i <- vers.length - 1 to 0 by -1) {
-        if (range.valid(vers(i).version)) {
-          return Some(vers(i))
-        }
-      }
-      None
-    }.getOrElse(None)
   }
 }

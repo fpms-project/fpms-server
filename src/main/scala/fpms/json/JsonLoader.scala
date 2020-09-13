@@ -10,6 +10,7 @@ import java.net.URLDecoder
 import com.typesafe.config.ConfigFactory
 import io.circe.syntax._
 import java.io.PrintWriter
+import fpms.SourcePackageInfo
 
 object JsonLoader {
 
@@ -63,7 +64,28 @@ object JsonLoader {
     }
   }
 
-  def convertList(array: List[RootInterface], start: Int): (List[RootInterfaceN], Int) = {
+  def createMap(): Map[String, Seq[SourcePackageInfo]] = {
+    val packs = loadIdList()
+    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
+    for (i <- 0 to packs.size - 1) {
+      if (i % 100000 == 0) logger.info(s"convert to List: $i")
+      val pack = packs(i)
+      val seq = scala.collection.mutable.ArrayBuffer.empty[SourcePackageInfo]
+      for (j <- 0 to pack.versions.size - 1) {
+        val d = pack.versions(j)
+        try {
+          val info = SourcePackageInfo(pack.name, d.version, d.dep, d.id)
+          seq += info
+        } catch {
+          case _: Throwable => Unit
+        }
+      }
+      packs_map += (pack.name -> seq.toSeq)
+    }
+    packs_map.toMap
+  }
+
+  private def convertList(array: List[RootInterface], start: Int): (List[RootInterfaceN], Int) = {
     var id = start
     val result = array.map(y =>
       RootInterfaceN(y.name, y.versions.map(v => {

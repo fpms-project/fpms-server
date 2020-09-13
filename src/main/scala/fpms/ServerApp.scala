@@ -80,9 +80,3 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       .orNotFound
   }
 }
-
-case class PackageNodeRespose(
-    src: SourcePackage,
-    directed: Seq[SourcePackage],
-    packages: Set[SourcePackage]
-)

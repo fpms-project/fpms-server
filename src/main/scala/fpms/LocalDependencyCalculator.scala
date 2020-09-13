@@ -5,6 +5,7 @@ import com.github.sh4869.semver_parser.Range
 import fpms.json.JsonLoader
 import scala.util.Try
 import fpms.SourcePackageInfo._
+import io.circe.Json
 
 class LocalDependencyCalculator extends DependencyCalculator {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
@@ -23,31 +24,10 @@ class LocalDependencyCalculator extends DependencyCalculator {
     */
   def load(): Unit = initialize()
 
-  def add(added: Seq[SourcePackageInfo]): Unit = ???
-
-  private def createMap(): Map[String, Seq[SourcePackageInfo]] = {
-    val packs = JsonLoader.loadIdList()
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackageInfo]]
-    for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) logger.info(s"convert to List: $i")
-      val pack = packs(i)
-      val seq = scala.collection.mutable.ArrayBuffer.empty[SourcePackageInfo]
-      for (j <- 0 to pack.versions.size - 1) {
-        val d = pack.versions(j)
-        try {
-          val info = SourcePackageInfo(pack.name, d.version, d.dep, d.id)
-          seq += info
-        } catch {
-          case _: Throwable => Unit
-        }
-      }
-      packs_map += (pack.name -> seq.toSeq)
-    }
-    packs_map.toMap
-  }
+  def add(added: Seq[SourcePackageInfo]): Unit = {}
 
   private def setup(): Unit = {
-    val packs_map = createMap()
+    val packs_map = JsonLoader.createMap()
     logger.info("complete convert to list")
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray

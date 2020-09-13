@@ -30,3 +30,9 @@ case class PackageNode(
     directed: Seq[Int],
     packages: scala.collection.mutable.Set[Int]
 )
+
+case class PackageNodeRespose(
+    src: SourcePackage,
+    directed: Seq[SourcePackage],
+    packages: Set[SourcePackage]
+)

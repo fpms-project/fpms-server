@@ -19,7 +19,6 @@ object Fpms extends IOApp {
   }
 
   def run(args: List[String]): IO[ExitCode] = {
-
     val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
     val xa = Transactor.fromDriverManager[IO](
       config.getString("driver"),
@@ -32,8 +31,9 @@ object Fpms extends IOApp {
       saveToDb(xa)
     }
     logger.info("setup")
-    val map = DependencyCalculator.inialize()
-    val app = new ServerApp[IO](repo, map)
+    val calcurator = new LocalDependencyCalculator()
+    calcurator.initialize()
+    val app = new ServerApp[IO](repo, calcurator)
     BlazeServerBuilder[IO]
       .bindHttp(8080, "localhost")
       .withHttpApp(app.ServerApp())

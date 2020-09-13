@@ -18,7 +18,7 @@ import org.http4s.Status
 import com.github.sh4869.semver_parser.SemVer
 import org.slf4j.LoggerFactory
 
-class ServerApp[F[_]](repo: SourcePackageRepository[F], map: Map[Int, PackageNode])(implicit F: ConcurrentEffect[F]) {
+class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(implicit F: ConcurrentEffect[F]) {
   object dsl extends Http4sDsl[F]
   private val logger = LoggerFactory.getLogger(this.getClass)
   def convertToResponse(
@@ -49,7 +49,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], map: Map[Int, PackageNod
             .filter(x => r.valid(SemVer(x.version)))
             .sortWith((a, b) => SemVer(a.version) > SemVer(b.version))
             .headOption
-          val z = t.flatMap(x => map.get(x.id))
+          val z = t.flatMap(x => calcurator.get(x.id))
           z match {
             case Some(value) => convertToResponse(value).map[Option[PackageNodeRespose]](x => Some(x))
             case None        => F.pure[Option[PackageNodeRespose]](None)
@@ -67,7 +67,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], map: Map[Int, PackageNod
         case GET -> Root / "hello" / name =>
           F.pure(Response(Status.Ok))
         case GET -> Root / "id" / IntVar(id) =>
-          map.get(id) match {
+          calcurator.get(id) match {
             case Some(value) => Ok(convertToResponse(value))
             case None        => NotFound()
           }

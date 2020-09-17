@@ -11,7 +11,8 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
     extends DependencyCalculator {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val validId = scala.collection.mutable.Seq.empty[Int]
+  private var validId = scala.collection.mutable.Set.empty[Int]
+  private val directedCache = scala.collection.mutable.Map.empty[Int, Seq[Int]]
 
   def initialize(): Unit = {
     redis.flushall
@@ -25,7 +26,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
     val packs_map_array = packs_map.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${}")
+      if (i % 1000000 == 0) logger.info(s"count: ${i}, length: ${validId.size}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
@@ -33,7 +34,8 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
         if (pack.deps.isEmpty) {
           // 自分自身だけ追加しておく
           redis.sadd(packagesKey(pack.id), pack.id)
-          validId :+ pack.id
+          validId += pack.id
+          directedCache += (pack.id -> Seq.empty)
         } else {
           val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
           depsx.sizeHint(pack.deps.size)
@@ -61,9 +63,10 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
             k -= 1
           }
           if (!failed) {
-            validId :+ pack.id
-            redis.lpush(directedKey(pack.id), Seq.empty, depsx.toSeq)
-            redis.sadd(packagesKey(pack.id), pack.id, depsx.toSeq)
+            validId += pack.id
+            redis.lpush(directedKey(pack.id), depsx.head, depsx.tail: _*)
+            directedCache += (pack.id -> depsx.toSeq)
+            redis.sadd(packagesKey(pack.id), pack.id, depsx.toSeq: _*)
           }
         }
       }
@@ -75,21 +78,50 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
   private def algo() {
     var count = 0
     var complete = false
+    var checkSet = Set.empty[Int]
+    val validIdSeq = validId.toSeq
     while (!complete) {
+      logger.info(s"start   lap ${count}")
+      val updated = scala.collection.mutable.Set.empty[Int]
       complete = true
-      for (i <- 0 to validId.size - 1) {
-        val id = validId(i)
-        val directed = redis.lrange[Int](directedKey(id), 0, -1)
-        directed.map(v =>
-          v.flatten.map(directedId => {
-            for {
-              members <- redis.smembers[Int](packagesKey(directedId))
-              added <- redis.sadd(packagesKey(id), id, members.flatten.seq)
-            } yield {
-              if (added > 0) complete = false
-            }
-          })
-        )
+      for (i <- 0 to validIdSeq.length - 1) {
+        if (i % 100000 == 0) logger.info(s"$i")
+        val id = validIdSeq(i)
+        val directed = getDirected(id)
+        val sets = scala.collection.mutable.Set.empty[Int]
+        directed.foreach(dId => {
+          if (count == 0 || checkSet.contains(dId)) {
+            redis
+              .smembers[Int](packagesKey(dId))
+              .map(v => {
+                sets ++= v.flatten
+              })
+          }
+        })
+        if (sets.nonEmpty) {
+          val added = redis.sadd(packagesKey(id), id, sets.toSeq: _*)
+          if (added.exists(_ > 0)) {
+            updated += id
+            complete = false
+          }
+        }
+      }
+      logger.info(s"complete lap ${count}, updated: ${updated.size}")
+      checkSet = updated.toSet
+      count += 1
+    }
+  }
+
+  private def getDirected(id: Int): Seq[Int] = {
+    directedCache.get(id) match {
+      case Some(value) => value
+      case None => {
+        val get = redis.lrange[Int](directedKey(id), 0, -1)
+        get.fold(Seq.empty[Int])(v => {
+          val result = v.flatten.toSeq
+          directedCache += (id -> result)
+          result
+        })
       }
     }
   }

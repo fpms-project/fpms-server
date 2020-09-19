@@ -26,14 +26,13 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
     val packs_map_array = packs_map.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 1000000 == 0) logger.info(s"count: ${i}, length: ${validId.size}")
+      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${validId.size}")
       val a = packs_map_array(i)
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
         val id = pack.id
         if (pack.deps.isEmpty) {
           // 自分自身だけ追加しておく
-          redis.sadd(packagesKey(pack.id), pack.id)
           validId += pack.id
           directedCache += (pack.id -> Seq.empty)
         } else {
@@ -66,7 +65,6 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
             validId += pack.id
             redis.lpush(directedKey(pack.id), depsx.head, depsx.tail: _*)
             directedCache += (pack.id -> depsx.toSeq)
-            redis.sadd(packagesKey(pack.id), pack.id, depsx.toSeq: _*)
           }
         }
       }
@@ -80,27 +78,27 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
     var complete = false
     var checkSet = Set.empty[Int]
     val validIdSeq = validId.toSeq
+    val packagesMap = scala.collection.mutable.Map.empty[Int, Set[Int]]
     while (!complete) {
       logger.info(s"start   lap ${count}")
       val updated = scala.collection.mutable.Set.empty[Int]
       complete = true
       for (i <- 0 to validIdSeq.length - 1) {
-        if (i % 100000 == 0) logger.info(s"$i")
+        if (i % 1000000 == 0) logger.info(s"$i")
         val id = validIdSeq(i)
         val directed = getDirected(id)
         val sets = scala.collection.mutable.Set.empty[Int]
-        directed.foreach(dId => {
-          if (count == 0 || checkSet.contains(dId)) {
-            redis
-              .smembers[Int](packagesKey(dId))
-              .map(v => {
-                sets ++= v.flatten
-              })
+        if (count == 0) packagesMap += (id -> directed.toSet)
+        directed.foreach(v => {
+          if (count == 0 || checkSet.contains(v)) {
+            sets ++= packagesMap.get(v).getOrElse(Set.empty)
           }
         })
         if (sets.nonEmpty) {
-          val added = redis.sadd(packagesKey(id), id, sets.toSeq: _*)
-          if (added.exists(_ > 0)) {
+          val set = packagesMap.get(id).get
+          val u = set ++ sets.toSet
+          if (sets.nonEmpty && u.size > set.size) {
+            packagesMap.update(id, u)
             updated += id
             complete = false
           }
@@ -110,6 +108,13 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
       checkSet = updated.toSet
       count += 1
     }
+    logger.info("save to redis...")
+    val seq = packagesMap.toMap.toSeq
+    for (i <- 0 to seq.length - 1) {
+      val v = seq(i)
+      redis.sadd(packagesKey(v._1), v._1, v._2.toSeq: _*)
+    }
+    logger.info("done!")
   }
 
   private def getDirected(id: Int): Seq[Int] = {

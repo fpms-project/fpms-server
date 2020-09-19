@@ -17,6 +17,8 @@ class LocalDependencyCalculator extends DependencyCalculator {
     ()
   }
 
+  def getMap = internalMap.toMap
+
   def get(id: Int): Option[PackageNode] = internalMap.get(id)
 
   /**
@@ -84,7 +86,6 @@ class LocalDependencyCalculator extends DependencyCalculator {
     val maps = internalMap.values.toArray
     var updateIdSets = scala.collection.mutable.TreeSet.empty[Int]
     var complete = false
-    var first = true
     while (!complete) {
       logger.info(s"start   lap ${count}")
       val updated = updateIdSets.toSet
@@ -99,11 +100,11 @@ class LocalDependencyCalculator extends DependencyCalculator {
         if (deps.size == 0) node_update_count += 1
         else {
           var currentSize = node.packages.size
-          node.packages ++= node.directed.toSet
+          if (count == 0) node.packages ++= node.directed.toSet
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
             // 更新されたやつだけ追加
-            if (first || updated.contains(d)) {
+            if (count == 0 || updated.contains(d)) {
               val tar = internalMap.get(d)
               if (tar.isDefined) {
                 node.packages ++= tar.get.packages
@@ -120,7 +121,6 @@ class LocalDependencyCalculator extends DependencyCalculator {
       }
       logger.info(s"complete lap ${count}, not updated: ${node_update_count}")
       count += 1
-      first = false
     }
     logger.info("complete!")
   }

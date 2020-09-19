@@ -37,12 +37,7 @@ object SourcePackageInfo {
     def latestInFits(condition: String): Option[SourcePackageInfo] = {
       Try {
         val range = Range(condition)
-        for (i <- 0 to seq.length - 1) {
-          if (range.valid(seq(i).version)) {
-            return Some(seq(i))
-          }
-        }
-        None
+        seq.filter(v => range.valid(v.version)).sortWith((l, r) => l.version > r.version).headOption
       }.getOrElse(None)
     }
   }

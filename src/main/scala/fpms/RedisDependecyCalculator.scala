@@ -16,8 +16,21 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
 
   def initialize(): Unit = {
     redis.flushall
-    initializeList()
-    algo()
+    val x = new LocalDependencyCalculator
+    x.initialize()
+    saveInitializeList(x.getMap)
+  }
+
+  private def saveInitializeList(map: Map[Int, PackageNode]) {
+    map.foreach(v => {
+      val id = v._1
+      if (v._2.directed.size > 1) {
+        redis.lpush(directedKey(id), v._2.directed.head, v._2.directed.tail: _*)
+      } else if (v._2.directed.size == 1) {
+        redis.lpush(directedKey(id), v._2.directed.head)
+      }
+      redis.sadd(packagesKey(id), id, v._2.packages.toSeq: _*)
+    })
   }
 
   private def initializeList() {
@@ -111,6 +124,8 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
     logger.info("save to redis...")
     val seq = packagesMap.toMap.toSeq
     for (i <- 0 to seq.length - 1) {
+      if (i % 10000 == 0) Thread.sleep(1000)
+      if (i % 1000000 == 0) logger.info(s"$i")
       val v = seq(i)
       redis.sadd(packagesKey(v._1), v._1, v._2.toSeq: _*)
     }

@@ -18,7 +18,9 @@ import org.http4s.Status
 import com.github.sh4869.semver_parser.SemVer
 import org.slf4j.LoggerFactory
 
-class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(implicit F: ConcurrentEffect[F]) {
+class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(
+    implicit F: ConcurrentEffect[F]
+) {
   object dsl extends Http4sDsl[F]
   private val logger = LoggerFactory.getLogger(this.getClass)
   def convertToResponse(
@@ -39,24 +41,27 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
     } yield PackageNodeRespose(src.get, directed, set.toSet)
   }
 
-  def getPackages(name: String, range: String) = {
+  def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
     Try {
       val r = Range(range)
       for {
         packs <- repo.findByName(name)
         x <- {
+          if(packs.isEmpty){
+            return F.pure(Left(s"${name} not found"))
+          }
           val t = packs
             .filter(x => r.valid(SemVer(x.version)))
             .sortWith((a, b) => SemVer(a.version) > SemVer(b.version))
             .headOption
           val z = t.flatMap(x => calcurator.get(x.id))
           z match {
-            case Some(value) => convertToResponse(value).map[Option[PackageNodeRespose]](x => Some(x))
-            case None        => F.pure[Option[PackageNodeRespose]](None)
+            case Some(value) => convertToResponse(value).map[Either[String, PackageNodeRespose]](x => Right(x))
+            case None        => F.pure[Either[String, PackageNodeRespose]](Left("failed to convert"))
           }
         }
       } yield x
-    }.getOrElse(F.pure[Option[PackageNodeRespose]](None))
+    }.getOrElse(F.pure[Either[String, PackageNodeRespose]](Left("range error")))
   }
 
   def ServerApp(): HttpApp[F] = {
@@ -73,8 +78,8 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
           }
         case GET -> Root / "get" / name / range =>
           getPackages(name, range).flatMap(_ match {
-            case Some(v) => Ok(v)
-            case None    => NotFound()
+            case Right(v) => Ok(v)
+            case Left(v)  => NotFound(v)
           })
       }
       .orNotFound

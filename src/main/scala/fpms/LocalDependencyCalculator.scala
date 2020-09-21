@@ -34,9 +34,11 @@ class LocalDependencyCalculator extends DependencyCalculator {
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
+    var all_count = 0
     for (i <- 0 to packs_map_array.length - 1) {
       if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${internalMap.size}")
       val a = packs_map_array(i)
+      all_count += a.length
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
         val id = pack.id
@@ -54,14 +56,17 @@ class LocalDependencyCalculator extends DependencyCalculator {
             if (cache.isEmpty) {
               var depP = for {
                 ds <- packs_map.get(d._1)
-                depP <- ds.latestInFits(d._2)
+                depP <- ds.latestInFits(d._2.replace("^latest$", "*"))
               } yield depP
               depP match {
                 case Some(v) => {
                   depsx += v.id
                   depCache.update(d, v.id)
                 }
-                case None => failed = true
+                case None => {
+                  // logger.info(s"package not found: ${d._1} ${d._2} <-- from ${pack.name}@${pack.version}")
+                  failed = true
+                }
               }
             } else {
               depsx += cache.get
@@ -74,7 +79,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
         }
       }
     }
-    logger.info("setup complete!")
+    logger.info(s"setup complete! ${internalMap.size}  - ${all_count}")
     println("setup complete")
   }
 

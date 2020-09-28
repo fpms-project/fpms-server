@@ -57,7 +57,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
           val z = t.flatMap(x => calcurator.get(x.id))
           z match {
             case Some(value) => convertToResponse(value).map[Either[String, PackageNodeRespose]](x => Right(x))
-            case None        => F.pure[Either[String, PackageNodeRespose]](Left("failed to convert"))
+            case None        => F.pure[Either[String, PackageNodeRespose]](Left("get failed"))
           }
         }
       } yield x

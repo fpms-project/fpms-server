@@ -64,7 +64,6 @@ class LocalDependencyCalculator extends DependencyCalculator {
                   depCache.update(d, v.id)
                 }
                 case None => {
-                  // logger.info(s"package not found: ${d._1} ${d._2} <-- from ${pack.name}@${pack.version}")
                   failed = true
                 }
               }
@@ -96,16 +95,14 @@ class LocalDependencyCalculator extends DependencyCalculator {
       val updated = updateIdSets.toSet
       updateIdSets.clear()
       complete = true
-      var node_update_count = 0
+      var updated_count = 0
       for (i <- 0 to maps.size - 1) {
         if (i % 1000000 == 0) logger.info(s"$i")
         val node = maps(i)
         val deps = node.directed
         // 依存関係がない場合は無視
-        if (deps.size == 0) node_update_count += 1
-        else {
+        if (deps.size != 0) {
           var currentSize = node.packages.size
-          if (count == 0) node.packages ++= node.directed.toSet
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
             // 更新されたやつだけ追加
@@ -116,15 +113,14 @@ class LocalDependencyCalculator extends DependencyCalculator {
               }
             }
           }
-          if (node.packages.size != currentSize) {
+          if (node.packages.size > currentSize) {
+            updated_count += 1
             complete = false
             updateIdSets += node.src
-          } else {
-            node_update_count += 1
           }
         }
       }
-      logger.info(s"complete lap ${count}, not updated: ${node_update_count}")
+      logger.info(s"complete lap ${count}, updated: ${updated_count}")
       count += 1
     }
     logger.info("complete!")

@@ -28,14 +28,22 @@ object Fpms extends IOApp {
       config.getString("pass")
     )
     val repo = new SourcePackageSqlRepository[IO](xa)
-    if (args.headOption.exists(_ == "db")) {
+    val command = args.headOption.getOrElse("server")
+    if (command == "db") {
       saveToDb(xa)
+      IO.unit.as(ExitCode.Success)
+    } else if (command == "convert_json") {
+      JsonLoader.convertJson()
       IO.unit.as(ExitCode.Success)
     } else {
       val r = new RedisClient("localhost", 6379)
       logger.info("setup")
-      val calcurator = new RedisDependecyCalculator[IO](r, repo)
+      val calcurator = new LocalDependencyCalculator()
       calcurator.initialize()
+      /*
+      val calcurator = new RedisDependecyCalculator[IO](r, repo)
+      // calcurator.initialize() 
+      */
       val app = new ServerApp[IO](repo, calcurator)
       BlazeServerBuilder[IO]
         .bindHttp(8080, "localhost")

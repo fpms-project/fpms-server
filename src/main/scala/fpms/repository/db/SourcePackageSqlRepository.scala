@@ -15,9 +15,8 @@ import cats.effect.Bracket
 import cats.effect.ConcurrentEffect
 import cats.data.NonEmptyList
 import fpms.SourcePackage
-import fpms.SourcePackageInfo
 import fs2.Stream
-import fpms.SourcePackageInfoSave
+import fpms.SourcePackageSave
 import org.slf4j.LoggerFactory
 
 class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(
@@ -27,43 +26,47 @@ class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(
 ) extends SourcePackageRepository[F] {
   private val logger = LoggerFactory.getLogger(this.getClass)
 
-  def insert(name: String, version: String, deps: Json, deps_latest: Json): F[Int] =
-    sql"insert into package (name, version, deps, deps_latest) values ($name, $version, $deps, $deps_latest)".update
+  def insert(name: String, version: String, deps: Json): F[Int] =
+    sql"insert into package (name, version, deps) values ($name, $version, $deps)".update
       .withUniqueGeneratedKeys[Int]("id")
       .transact(transactor)
 
-  def insertMulti(packs: List[SourcePackageInfo]): F[Unit] = {
-    val s = "insert into package (name, version, deps, id, deps_latest) values (?, ?, ?, ?, \'{}\')"
-    Update[SourcePackageInfoSave](s).updateMany(packs.map(_.to)).transact(transactor).as(Unit)
+  def insertMulti(packs: List[SourcePackage]): F[Unit] = {
+    val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"
+    Update[SourcePackageSave](s).updateMany(packs.map(_.to)).transact(transactor).as(Unit)
   }
 
   def find(name: String, version: String): F[Option[SourcePackage]] =
-    sql"select id, name, version, desp, deps_latest from package where name = $name AND version = $version"
-      .query[SourcePackage]
+    sql"select name, version, deps, id from package where name = $name AND version = $version"
+      .query[SourcePackageSave]
       .option
+      .map(x => x.map(_.to))
       .transact(transactor)
 
   def findByDeps(depName: String): F[List[SourcePackage]] =
-    sql"select id, name, version, deps, deps_latest from package where json_extract_path(deps, ${depName}) is NOT NULL"
-      .query[SourcePackage]
+    sql"select name, version, deps, id from package where json_extract_path(deps, ${depName}) is NOT NULL"
+      .query[SourcePackageSave]
       .to[List]
+      .map(x => x.map(_.to))
       .transact(transactor)
 
   def findByName(name: String): F[List[SourcePackage]] =
-    sql"select id, name, version, deps, deps_latest from package where name = $name"
-      .query[SourcePackage]
+    sql"select name, version, deps, id from package where name = $name"
+      .query[SourcePackageSave]
       .to[List]
+      .map(x => x.map(_.to))
       .transact(transactor)
 
   def findById(id: Int): F[Option[SourcePackage]] =
-    sql"select id, name, version, deps, deps_latest from package where id = $id"
-      .query[SourcePackage]
+    sql"select name, version, deps, id from package where id = $id"
+      .query[SourcePackageSave]
       .option
+      .map(x => x.map(_.to))
       .transact(transactor)
 
   def findByIds(ids: NonEmptyList[Int]): F[List[SourcePackage]] = {
-    val q = sql"select id, name, version, deps, deps_latest from package where " ++ Fragments.in(fr"id", ids)
-    q.query[SourcePackage].to[List].transact(transactor)
+    val q = sql"select name, version, deps, id from package where " ++ Fragments.in(fr"id", ids)
+    q.query[SourcePackageSave].to[List].map(x => x.map(_.to)).transact(transactor)
   }
 
   def getMaxId(): F[Int] = {

@@ -24,7 +24,7 @@ object SqlSaver {
       if (i % 10000 == 0) logger.info(s"save in db: $i")
       val pack = packages(i)
       val list = pack.versions
-        .map(x => Try { Some(SourcePackageInfo(pack.name, x.version, x.dep, x.id)) }.getOrElse(None))
+        .map(x => Try { Some(SourcePackage(pack.name, x.version, x.dep, x.id)) }.getOrElse(None))
         .flatten
       repo.insertMulti(list.toList).unsafeRunSync()
     }

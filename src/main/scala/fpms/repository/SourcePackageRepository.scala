@@ -4,13 +4,12 @@ import io.circe.Json
 import cats.data.NonEmptyList
 import fs2.Stream
 import fpms.SourcePackage
-import fpms.SourcePackageInfo
 
 trait SourcePackageRepository[F[_]] {
 
-  def insert(name: String, version: String, deps: Json, deps_latest: Json): F[Int]
+  def insert(name: String, version: String, deps: Json): F[Int]
 
-  def insertMulti(packs: List[SourcePackageInfo]): F[Unit]
+  def insertMulti(packs: List[SourcePackage]): F[Unit]
 
   def find(name: String, version: String): F[Option[SourcePackage]]
   

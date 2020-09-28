@@ -51,8 +51,8 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
             return F.pure(Left(s"${name} not found"))
           }
           val t = packs
-            .filter(x => r.valid(SemVer(x.version)))
-            .sortWith((a, b) => SemVer(a.version) > SemVer(b.version))
+            .filter(x => r.valid(x.version))
+            .sortWith((a, b) => a.version > b.version)
             .headOption
           val z = t.flatMap(x => calcurator.get(x.id))
           z match {

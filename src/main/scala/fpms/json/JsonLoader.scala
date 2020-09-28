@@ -54,7 +54,7 @@ object JsonLoader {
         case Right(v) => {
           val x = convertList(v, id)
           id = x._2
-          new PrintWriter(s"jsons/with/${i}.json") {
+          new PrintWriter(s"jsons/id/${i}.json") {
             write(x._1.asJson.toString())
             close()
           }

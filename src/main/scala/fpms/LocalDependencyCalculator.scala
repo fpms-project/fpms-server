@@ -4,7 +4,7 @@ import org.slf4j.LoggerFactory
 import com.github.sh4869.semver_parser.Range
 import fpms.json.JsonLoader
 import scala.util.Try
-import fpms.SourcePackageInfo._
+import fpms.SourcePackage._
 import io.circe.Json
 
 class LocalDependencyCalculator extends DependencyCalculator {
@@ -26,7 +26,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
     */
   def load(): Unit = initialize()
 
-  def add(added: Seq[SourcePackageInfo]): Unit = {}
+  def add(added: SourcePackage): Unit = {}
 
   private def setup(): Unit = {
     val packs_map = JsonLoader.createMap()

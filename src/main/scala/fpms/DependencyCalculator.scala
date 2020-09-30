@@ -22,7 +22,7 @@ trait DependencyCalculator {
     *
     * @param added
     */
-  def add(added: Seq[SourcePackageInfo]): Unit
+  def add(addPackage: SourcePackage): Unit
 }
 
 case class PackageNode(

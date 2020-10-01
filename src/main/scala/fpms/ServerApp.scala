@@ -66,12 +66,16 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
     import dsl._
     import fpms.SourcePackage._
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
+    implicit val encoder = jsonEncoderOf[F, List[SourcePackageSave]]
     implicit val addDecoder = deriveDecoder[AddPackage]
     implicit val decoderxx = jsonOf[F, AddPackage]
     HttpRoutes
       .of[F] {
-        case GET -> Root / "hello" / name =>
-          F.pure(Response(Status.Ok))
+        case GET -> Root / "get_package" / name =>
+          for {
+            list <- repo.findByName(name)
+            x <- Ok(list.map(_.to))
+          } yield x
         case GET -> Root / "id" / IntVar(id) =>
           calcurator.get(id) match {
             case Some(value) => Ok(convertToResponse(value))
@@ -83,7 +87,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
             case Left(v)  => NotFound(v)
           })
         case req @ POST -> Root / "add" => {
-          for { 
+          for {
             _ <- F.pure(logger.info(s"${req.headers}"))
             v <- req.as[AddPackage]
             x <- Ok(calcurator.add(v))

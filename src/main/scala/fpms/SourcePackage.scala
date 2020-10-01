@@ -9,6 +9,7 @@ import io.circe.parser.decode
 import SourcePackage._
 import com.github.sh4869.semver_parser.{SemVer, Range}
 import scala.util.Try
+import io.circe.Encoder
 
 case class SourcePackageSave(name: String, version: String, deps: Json, id: Int) {
   def to: SourcePackage = SourcePackage(name, SemVer(version), deps.as[Deps].toOption.getOrElse(Map.empty), id)
@@ -17,6 +18,8 @@ case class SourcePackageSave(name: String, version: String, deps: Json, id: Int)
 case class SourcePackage(name: String, version: SemVer, deps: Deps, id: Int) {
   def to: SourcePackageSave = SourcePackageSave(name, version.original, deps.asJson, id)
 }
+
+case class AddPackage(name: String, version: String, deps: Map[String, String])
 
 case class LatestChild(version: String, id: Int)
 

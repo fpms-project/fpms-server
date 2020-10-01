@@ -26,7 +26,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
     */
   def load(): Unit = initialize()
 
-  def add(added: SourcePackage): Unit = {}
+  def add(added: AddPackage): Unit = {}
 
   private def setup(): Unit = {
     val packs_map = JsonLoader.createMap()

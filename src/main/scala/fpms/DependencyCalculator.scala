@@ -1,5 +1,7 @@
 package fpms
 
+import com.github.sh4869.semver_parser.SemVer
+
 trait DependencyCalculator {
 
   /**
@@ -22,7 +24,7 @@ trait DependencyCalculator {
     *
     * @param added
     */
-  def add(addPackage: SourcePackage): Unit
+  def add(addPackage: AddPackage): Unit
 }
 
 case class PackageNode(

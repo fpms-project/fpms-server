@@ -3,6 +3,7 @@ package fpms
 import org.http4s.HttpApp
 import io.circe.generic.auto._
 import io.circe.syntax._
+import io.circe._, io.circe.generic.semiauto._
 import org.http4s.circe._
 import org.http4s.dsl._
 import org.http4s.implicits._
@@ -47,13 +48,10 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       for {
         packs <- repo.findByName(name)
         x <- {
-          if(packs.isEmpty){
+          if (packs.isEmpty) {
             return F.pure(Left(s"${name} not found"))
           }
-          val t = packs
-            .filter(x => r.valid(x.version))
-            .sortWith((a, b) => a.version > b.version)
-            .headOption
+          val t = packs.filter(x => r.valid(x.version)).sortWith((a, b) => a.version > b.version).headOption
           val z = t.flatMap(x => calcurator.get(x.id))
           z match {
             case Some(value) => convertToResponse(value).map[Either[String, PackageNodeRespose]](x => Right(x))
@@ -66,7 +64,10 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
 
   def ServerApp(): HttpApp[F] = {
     import dsl._
+    import fpms.SourcePackage._
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
+    implicit val addDecoder = deriveDecoder[AddPackage]
+    implicit val decoderxx = jsonOf[F, AddPackage]
     HttpRoutes
       .of[F] {
         case GET -> Root / "hello" / name =>
@@ -81,6 +82,13 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
             case Right(v) => Ok(v)
             case Left(v)  => NotFound(v)
           })
+        case req @ POST -> Root / "add" => {
+          for { 
+            _ <- F.pure(logger.info(s"${req.headers}"))
+            v <- req.as[AddPackage]
+            x <- Ok(calcurator.add(v))
+          } yield x
+        }
       }
       .orNotFound
   }

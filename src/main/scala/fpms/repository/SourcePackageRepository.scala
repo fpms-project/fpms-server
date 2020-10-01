@@ -9,6 +9,8 @@ trait SourcePackageRepository[F[_]] {
 
   def insert(name: String, version: String, deps: Json): F[Int]
 
+  def insert(pack: SourcePackage): F[Unit]
+
   def insertMulti(packs: List[SourcePackage]): F[Unit]
 
   def find(name: String, version: String): F[Option[SourcePackage]]

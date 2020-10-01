@@ -31,6 +31,11 @@ class SourcePackageSqlRepository[F[_]](transactor: Transactor[F])(
       .withUniqueGeneratedKeys[Int]("id")
       .transact(transactor)
 
+  def insert(pack: SourcePackage): F[Unit] = {
+    val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"
+    Update[SourcePackageSave](s).toUpdate0(pack.to).run.transact(transactor).as(Unit)
+  }
+
   def insertMulti(packs: List[SourcePackage]): F[Unit] = {
     val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"
     Update[SourcePackageSave](s).updateMany(packs.map(_.to)).transact(transactor).as(Unit)

@@ -3,6 +3,7 @@ package fpms
 import org.http4s.HttpApp
 import io.circe.generic.auto._
 import io.circe.syntax._
+import io.circe._, io.circe.generic.semiauto._
 import org.http4s.circe._
 import org.http4s.dsl._
 import org.http4s.implicits._
@@ -18,7 +19,9 @@ import org.http4s.Status
 import com.github.sh4869.semver_parser.SemVer
 import org.slf4j.LoggerFactory
 
-class ServerApp[F[_]](repo: SourcePackageRepository[F], map: Map[Int, PackageNode])(implicit F: ConcurrentEffect[F]) {
+class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(
+    implicit F: ConcurrentEffect[F]
+) {
   object dsl extends Http4sDsl[F]
   private val logger = LoggerFactory.getLogger(this.getClass)
   def convertToResponse(
@@ -39,50 +42,58 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], map: Map[Int, PackageNod
     } yield PackageNodeRespose(src.get, directed, set.toSet)
   }
 
-  def getPackages(name: String, range: String) = {
+  def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
     Try {
       val r = Range(range)
       for {
         packs <- repo.findByName(name)
         x <- {
-          val t = packs
-            .filter(x => r.valid(SemVer(x.version)))
-            .sortWith((a, b) => SemVer(a.version) > SemVer(b.version))
-            .headOption
-          val z = t.flatMap(x => map.get(x.id))
+          if (packs.isEmpty) {
+            return F.pure(Left(s"${name} not found"))
+          }
+          val t = packs.filter(x => r.valid(x.version)).sortWith((a, b) => a.version > b.version).headOption
+          val z = t.flatMap(x => calcurator.get(x.id))
           z match {
-            case Some(value) => convertToResponse(value).map[Option[PackageNodeRespose]](x => Some(x))
-            case None        => F.pure[Option[PackageNodeRespose]](None)
+            case Some(value) => convertToResponse(value).map[Either[String, PackageNodeRespose]](x => Right(x))
+            case None        => F.pure[Either[String, PackageNodeRespose]](Left("get failed"))
           }
         }
       } yield x
-    }.getOrElse(F.pure[Option[PackageNodeRespose]](None))
+    }.getOrElse(F.pure[Either[String, PackageNodeRespose]](Left("range error")))
   }
 
   def ServerApp(): HttpApp[F] = {
     import dsl._
+    import fpms.SourcePackage._
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
+    implicit val encoder = jsonEncoderOf[F, List[SourcePackageSave]]
+    implicit val addDecoder = deriveDecoder[AddPackage]
+    implicit val decoderxx = jsonOf[F, AddPackage]
     HttpRoutes
       .of[F] {
-        case GET -> Root / "hello" / name =>
-          F.pure(Response(Status.Ok))
+        case GET -> Root / "get_package" / name =>
+          for {
+            list <- repo.findByName(name)
+            x <- Ok(list.map(_.to))
+          } yield x
         case GET -> Root / "id" / IntVar(id) =>
-          map.get(id) match {
+          calcurator.get(id) match {
             case Some(value) => Ok(convertToResponse(value))
             case None        => NotFound()
           }
         case GET -> Root / "get" / name / range =>
           getPackages(name, range).flatMap(_ match {
-            case Some(v) => Ok(v)
-            case None    => NotFound()
+            case Right(v) => Ok(v)
+            case Left(v)  => NotFound(v)
           })
+        case req @ POST -> Root / "add" => {
+          for {
+            _ <- F.pure(logger.info(s"${req.headers}"))
+            v <- req.as[AddPackage]
+            x <- Ok(calcurator.add(v))
+          } yield x
+        }
       }
       .orNotFound
   }
 }
-
-case class PackageNodeRespose(
-    src: SourcePackage,
-    directed: Seq[SourcePackage],
-    packages: Set[SourcePackage]
-)

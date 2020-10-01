@@ -25,7 +25,8 @@ lazy val root = (project in file(".")).settings(
     "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
     "co.fs2" %% "fs2-experimental" % "2.1.0",
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
-    "com.typesafe" % "config" % "1.4.0"
+    "com.typesafe" % "config" % "1.4.0",
+     "net.debasishg" %% "redisclient" % "3.30"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),

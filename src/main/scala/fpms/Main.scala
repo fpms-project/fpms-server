@@ -9,6 +9,7 @@ import com.typesafe.config._
 import doobie._
 import fpms.repository.SourcePackageRepository
 import fpms.repository.db.SourcePackageSqlRepository
+import com.redis.RedisClient
 
 object Fpms extends IOApp {
   private val logger = LoggerFactory.getLogger(this.getClass)
@@ -19,7 +20,6 @@ object Fpms extends IOApp {
   }
 
   def run(args: List[String]): IO[ExitCode] = {
-
     val config = ConfigFactory.load("app.conf").getConfig("server.postgresql")
     val xa = Transactor.fromDriverManager[IO](
       config.getString("driver"),
@@ -28,18 +28,30 @@ object Fpms extends IOApp {
       config.getString("pass")
     )
     val repo = new SourcePackageSqlRepository[IO](xa)
-    if (args.headOption.exists(_ == "db")) {
+    val command = args.headOption.getOrElse("server")
+    if (command == "db") {
       saveToDb(xa)
+      IO.unit.as(ExitCode.Success)
+    } else if (command == "convert_json") {
+      JsonLoader.convertJson()
+      IO.unit.as(ExitCode.Success)
+    } else {
+      val r = new RedisClient("localhost", 6379)
+      logger.info("setup")
+      val calcurator = new LocalDependencyCalculator()
+      calcurator.initialize()
+      /*
+      val calcurator = new RedisDependecyCalculator[IO](r, repo)
+      // calcurator.initialize() 
+      */
+      val app = new ServerApp[IO](repo, calcurator)
+      BlazeServerBuilder[IO]
+        .bindHttp(8080, "localhost")
+        .withHttpApp(app.ServerApp())
+        .serve
+        .compile
+        .drain
+        .as(ExitCode.Success)
     }
-    logger.info("setup")
-    val map = DependencyCalculator.inialize()
-    val app = new ServerApp[IO](repo, map)
-    BlazeServerBuilder[IO]
-      .bindHttp(8080, "localhost")
-      .withHttpApp(app.ServerApp())
-      .serve
-      .compile
-      .drain
-      .as(ExitCode.Success)
   }
 }

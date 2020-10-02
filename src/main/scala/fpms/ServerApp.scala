@@ -39,7 +39,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       } else {
         repo.findByIds(node.packages.toList.toNel.get)
       }
-    } yield PackageNodeRespose(src.get, directed, set.toSet)
+    } yield PackageNodeRespose(src.get.to, directed.map(_.to), set.toSet[SourcePackage].map(_.to))
   }
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {

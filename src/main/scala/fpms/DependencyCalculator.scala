@@ -34,7 +34,7 @@ case class PackageNode(
 )
 
 case class PackageNodeRespose(
-    src: SourcePackage,
-    directed: Seq[SourcePackage],
-    packages: Set[SourcePackage]
+    src: SourcePackageSave,
+    directed: Seq[SourcePackageSave],
+    packages: Set[SourcePackageSave]
 )

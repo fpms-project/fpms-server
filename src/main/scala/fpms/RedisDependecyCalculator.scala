@@ -15,7 +15,6 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
 ) extends DependencyCalculator {
 
   private val logger = LoggerFactory.getLogger(this.getClass)
-  private val directedCache = scala.collection.mutable.Map.empty[Int, Seq[Int]]
 
   def initialize(): Unit = {
     redis.flushall
@@ -25,127 +24,154 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
   }
 
   private def saveInitializeList(map: Map[Int, PackageNode]) {
-    map.foreach(v => {
-      val id = v._1
-      redis.sadd(allIdSetKey, id, Seq.empty);
-      if (v._2.directed.size > 1) {
-        redis.lpush(directedKey(id), v._2.directed.head, v._2.directed.tail: _*)
-      } else if (v._2.directed.size == 1) {
-        redis.lpush(directedKey(id), v._2.directed.head)
-      }
-      redis.sadd(packagesKey(id), id, v._2.packages.toSeq: _*)
-    })
+    // すべてのIDを保存
+    redis.set(allIdSetKey, map.keySet.mkString(","))
+    map
+      .grouped(100)
+      .zipWithIndex
+      .foreach(v => {
+        if (v._2 * 100 % 1000000 == 0) logger.info(s"${v._2 * 100}")
+        // パッケージNodeそれぞれについて直接依存と間接依存をキーにしてデータを保存する
+        val kvs = v._1
+          .map(x => {
+            if (x._2.directed.size > 0) {
+              Seq((directedKey(x._1), x._2.directed.mkString(",")), (packagesKey(x._1), x._2.packages.mkString(",")))
+            } else {
+              Seq((packagesKey(x._1), x._2.packages.mkString(",")))
+            }
+          })
+          .flatten
+        redis.mset(kvs.toSeq: _*)
+      })
   }
 
-  def get(id: Int): Option[PackageNode] = {
-    for {
-      d <- redis.lrange[Int](directedKey(id), 0, -1)
-      p <- redis.smembers[Int](packagesKey(id))
-    } yield PackageNode(id, d.flatten, scala.collection.mutable.Set[Int](p.flatten.toSeq: _*))
-  }
+  def get(id: Int): Option[PackageNode] =
+    Some(
+      PackageNode(
+        id,
+        redis.get[String](directedKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty),
+        scala.collection.mutable.Set(redis.get[String](packagesKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty): _*)
+      )
+    )
 
   def load(): Unit = ???
 
   def add(added: AddPackage): Unit = {
     import fpms.SourcePackage._
-    val directedUpdated = scala.collection.mutable.Set.empty[Int]
+    // 追加リクエストのパッケージを追加
     val id = F.toIO(spRepo.getMaxId()).unsafeRunSync() + 1
     val directly = scala.collection.mutable.Set.empty[SourcePackage]
-    var error = false
-    added.deps.map(v => {
+    added.deps.foreach(v => {
       val targets = F.toIO(spRepo.findByName(v._1)).unsafeRunSync()
       targets.toSeq.latestInFits(v._2) match {
         case Some(value) => directly.add(value)
-        case None        => error = true
-      }
-    })
-    if (error) {
-      logger.info("error: cannot get latest")
-      return ()
-    }
-    val target = SourcePackage(added.name, SemVer(added.version), added.deps, id)
-    F.toIO(spRepo.insert(target)).unsafeRunSync()
-    logger.info(s"added package: ${target.name}@${target.version.original}")
-
-    val targetDirectly = directly.map(_.id)
-    val targetAllMap = scala.collection.mutable.Set(directly.map(_.id).toSeq :+ target.id: _*)
-    val updateDirectlyMap = scala.collection.mutable.Map.empty[Int, Seq[Int]]
-    val updateAllMap = scala.collection.mutable.Map.empty[Int, Set[Int]]
-
-    logger.info(s"getting depends on ${target.name}")
-    val dependes = F.toIO(spRepo.findByDeps(target.name)).unsafeRunSync()
-    logger.info(s"getted depends on ${target.name}")
-    val validList = dependes.filter(v =>
-      v.deps
-        .get(target.name)
-        .exists(condition => Try { Range(condition.replace("^latest$", "*")).valid(target.version) }.getOrElse(false))
-    )
-    logger.info(s"valid length: ${validList.size}")
-    validList.foreach(pack => {
-      val ids = redis.lrange[Int](directedKey(pack.id), 0, -1)
-      if (ids.exists(_.nonEmpty)) {
-        val idList = ids.get.flatten
-        val directed = F.toIO(spRepo.findByIds(idList.toNel.get)).unsafeRunSync()
-        val v = directed.filter(p => p.name == target.name && p.version < target.version).headOption
-        if (v.isDefined) {
-          logger.info(s"updated directly package: ${pack.name}@${pack.version.original}")
-          val newList = idList.filterNot(x => x == v.get.id) :+ target.id
-          updateDirectlyMap.update(pack.id, newList)
-          updateAllMap.update(pack.id, (newList :+ pack.id).toSet)
+        case None => {
+          logger.error(s"error : not found dependency ${v._1}@${v._2}")
+          return ()
         }
       }
     })
-    logger.info(s"update ${updateDirectlyMap.size} package")
-    // 追加されたパッケージによって変更されたパッケージがない場合は、追加されたパッケージについてだけ計算すればいい
-    if (updateDirectlyMap.isEmpty) {
-      logger.info("save only once")
-      targetDirectly.foreach(v => {
-        val x = redis.smembers[Int](packagesKey(v))
-        targetAllMap ++= x.map(_.flatten).getOrElse(Set.empty)
-      })
-      if (targetDirectly.size > 1) {
-        redis.lpush(directedKey(target.id), targetDirectly.head, targetDirectly.tail.toSeq: _*)
-      } else if (targetDirectly.size == 1) {
-        redis.lpush(directedKey(target.id), targetDirectly.head)
+    val addedPackage = SourcePackage(added.name, SemVer(added.version), added.deps, id)
+    F.toIO(spRepo.insert(addedPackage)).unsafeRunSync()
+    logger.info(s"added package: ${addedPackage.name}@${addedPackage.version.original}")
+
+    // 追加したパッケージの直接依存と間接依存
+    val addedDirectlyDeps = directly.map(_.id)
+    val addedIndirectlyDeps = scala.collection.mutable.Set(directly.map(_.id).toSeq: _*)
+    // 追加したパッケージによって更新されるパッケージのMap(直接依存・間接依存それぞれ)
+    val updatedPackDirectlyDepsMap = scala.collection.mutable.Map.empty[Int, Set[Int]]
+    val updatedPackIndirectlyDepsMap = scala.collection.mutable.Map.empty[Int, Set[Int]]
+
+    logger.info(s"getting depends on ${addedPackage.name}")
+    val validCondPackList = F
+      .toIO(spRepo.findByDeps(addedPackage.name))
+      .unsafeRunSync()
+      .filter(
+        _.deps
+          .get(addedPackage.name)
+          .exists(condition =>
+            Try { Range(condition.replace("^latest$", "*")).valid(addedPackage.version) }.getOrElse(false)
+          )
+      )
+    logger.info(s"valid length: ${validCondPackList.size}")
+
+    // 追加されたパッケージのバージョンが指定条件を満たしているものについて、現在依存しているパッケージのバージョンとの比較を行う
+    validCondPackList.foreach(pack => {
+      val ids = redis.get[String](directedKey(pack.id)).map(splitRedisData(_))
+      if (ids.exists(_.nonEmpty)) {
+        val idList = ids.get
+        val directed = F.toIO(spRepo.findByIds(idList.toList.toNel.get)).unsafeRunSync()
+        val v = directed.filter(p => p.name == addedPackage.name && p.version < addedPackage.version).headOption
+        if (v.isDefined) {
+          // logger.info(s"update ${pack.name}@${pack.version.original}")
+          val newList = idList.filterNot(x => x == v.get.id) :+ addedPackage.id
+          updatedPackDirectlyDepsMap.update(pack.id, newList.toSet)
+          updatedPackIndirectlyDepsMap.update(pack.id, (newList :+ pack.id).toSet)
+        }
       }
-      redis.sadd(packagesKey(target.id), target.id, targetAllMap.toSeq: _*)
+    })
+    logger.info(s"update ${updatedPackDirectlyDepsMap.size} package")
+
+    if (updatedPackDirectlyDepsMap.isEmpty) {
+      // 追加されたパッケージによって変更されたパッケージがない場合は、追加されたパッケージについてだけ計算すればいい
+      logger.info("save the set of pacakges only about added package")
+      addedDirectlyDeps.foreach(v =>
+        addedIndirectlyDeps ++= redis.get[String](packagesKey(v)).map(splitRedisData(_)).getOrElse(Set.empty)
+      )
+      if (addedDirectlyDeps.size > 1) redis.set(directedKey(addedPackage.id), addedDirectlyDeps.mkString(","))
+      redis.set(packagesKey(addedPackage.id), addedIndirectlyDeps.mkString(","))
     } else {
-      logger.info("calcurate program")
-      val allValidId = redis.get[String](allIdSetKey).map(_.split(",").toSeq.map(_.toIntOption).flatten).getOrElse(Seq.empty[Int])
-      logger.info("??")
+      logger.info("calcurate all the set of indirectly-depending packages...")
+      val allValidId =
+        redis.get[String](allIdSetKey).map(x => splitRedisData(x)).getOrElse(Seq.empty[Int])
+      val allDirectlyDependecies =
+        allValidId
+          .grouped(100)
+          .map(v => {
+            val x = redis.mget[String](directedKey(v.head), v.tail.map(id => directedKey(id)))
+            x.map(_.zipWithIndex.map(x => (v(x._2), x._1.map(v => splitRedisData(v).toSet).getOrElse(Set.empty)))).get
+          })
+          .flatten
+          .toMap[Int, Set[Int]]
+
       var complete = false
       while (!complete) {
         var updatecount = 0
         complete = true
         var count = 0
         allValidId.foreach(id => {
-          if (count % 10000 == 0) logger.info(s"${count}")
-          val directly = updateDirectlyMap.get(id).getOrElse(getDirected(id))
-          updateAllMap.get(id) match {
+          if (count % 1000000 == 0) logger.info(s"${count}")
+          val directly =
+            updatedPackDirectlyDepsMap.get(id).getOrElse(allDirectlyDependecies.get(id).getOrElse(Set.empty))
+          updatedPackIndirectlyDepsMap.get(id) match {
             case Some(value) => {
+              // 間接依存関係が今回の追加で更新されている場合、再度計算する
               val newMap = scala.collection.mutable.Set.empty[Int]
-              directly.map(direcly_p_id => {
-                val v = updateAllMap
+              newMap ++= directly
+              directly.foreach(direcly_p_id => {
+                val v = updatedPackIndirectlyDepsMap
                   .get(direcly_p_id)
-                  .getOrElse(redis.smembers[Int](packagesKey(direcly_p_id)).map(_.flatten).get)
+                  .getOrElse(redis.get[String](packagesKey(direcly_p_id)).map(splitRedisData(_)).getOrElse(Seq.empty))
                 newMap ++= v
               })
               if (newMap.size > value.size) {
                 updatecount += 1
-                updateAllMap.update(id, newMap.toSet)
+                updatedPackIndirectlyDepsMap.update(id, newMap.toSet)
               }
             }
             case None => {
-              if (updateAllMap.find(v => directly.contains(v._1)).isDefined) {
+              // 間接依存関係が今回の追加で更新されていない場合、自分が直接依存するパッケージの間接依存パッケージが更新されていないかどうかを確認する
+              if (updatedPackIndirectlyDepsMap.keySet.intersect(directly).nonEmpty) {
                 val newMap = scala.collection.mutable.Set.empty[Int]
-                directly.map(direcly_p_id => {
-                  val v = updateAllMap
+                newMap ++= directly
+                directly.foreach(direcly_p_id => {
+                  val v = updatedPackIndirectlyDepsMap
                     .get(direcly_p_id)
-                    .getOrElse(redis.smembers[Int](packagesKey(direcly_p_id)).map(_.flatten).get)
+                    .getOrElse(redis.get[String](packagesKey(direcly_p_id)).map(splitRedisData(_)).getOrElse(Seq.empty))
                   newMap ++= v
                 })
                 updatecount += 1
-                updateAllMap.update(id, newMap.toSet)
+                updatedPackIndirectlyDepsMap.update(id, newMap.toSet)
               }
             }
           }
@@ -156,39 +182,20 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
           complete = false
         }
       }
-      logger.info("calcurate complete")
-      updateAllMap.foreach(v => {
-        redis.del(packagesKey(v._1))
-        redis.sadd(packagesKey(v._1), v._1, v._2.toSeq: _*)
-      })
-      updateDirectlyMap.foreach(v => {
-        redis.del(directedKey(v._1))
-        if (v._2.size > 1) {
-          redis.lpush(directedKey(v._1), v._2.head, v._2.tail: _*)
-        } else if (v._2.size == 1) {
-          redis.lpush(directedKey(v._1), v._2.head)
-        }
-      })
+      logger.info(s"calcurate complete! finally update packages :${updatedPackIndirectlyDepsMap.size}")
+      redis.mset(updatedPackIndirectlyDepsMap.map(v => (directedKey(v._1), v._2.mkString(","))).toSeq: _*)
+      redis.mset(
+        updatedPackDirectlyDepsMap
+          .map(v => if (v._2.isEmpty) None else Some((packagesKey(v._1), v._2.mkString(","))))
+          .toSeq
+          .flatten: _*
+      )
+      logger.info("complete save data!")
     }
     ()
-    // spRepo.findByDeps() であるパッケージに依存しているパッケージを全部取得
-    // その中で新しいバージョンに適合するものだけを取得
-    // redisに問い合わせをして、今あるバージョンより新しければredisにdirected_x_new を追加してそれを計算するように
   }
 
-  private def getDirected(id: Int): Seq[Int] = {
-    directedCache.get(id) match {
-      case Some(value) => value
-      case None => {
-        val get = redis.lrange[Int](directedKey(id), 0, -1)
-        get.fold(Seq.empty[Int])(v => {
-          val result = v.flatten.toSeq
-          directedCache += (id -> result)
-          result
-        })
-      }
-    }
-  }
+  private def splitRedisData(str: String): Seq[Int] = str.split(",").map(_.toIntOption).flatten.toSeq
 
   private def directedKey(id: Int) = s"directed_${id}"
   private def packagesKey(id: Int) = s"packages_${id}"

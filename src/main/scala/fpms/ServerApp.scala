@@ -52,9 +52,6 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       for {
         packs <- repo.findByName(name)
         x <- {
-          if (packs.isEmpty) {
-            return F.pure(Left(s"${name} not found"))
-          }
           val t = packs.filter(x => r.valid(x.version)).sortWith((a, b) => a.version > b.version).headOption
           val z = t.flatMap(x => calcurator.get(x.id))
           z match {

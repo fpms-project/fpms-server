@@ -27,7 +27,8 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
   def convertToResponse(
       node: PackageNode
   ): F[PackageNodeRespose] = {
-    for {
+    logger.info(s"start get package from mysql")
+    val p = for {
       src <- repo.findById(node.src)
       directed <- if (node.directed.isEmpty) {
         F.pure(Seq.empty)
@@ -39,18 +40,18 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       } else {
         repo.findByIds(node.packages.toList.toNel.get)
       }
-    } yield PackageNodeRespose(src.get, directed, set.toSet)
+    } yield PackageNodeRespose(src.get.to, directed.map(_.to), set.toSet[SourcePackage].map(_.to))
+    logger.info("end get package from mysql")
+    p
   }
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
     Try {
+      logger.info(s"start get package from redis: ${name}@${range}")
       val r = Range(range)
       for {
         packs <- repo.findByName(name)
         x <- {
-          if (packs.isEmpty) {
-            return F.pure(Left(s"${name} not found"))
-          }
           val t = packs.filter(x => r.valid(x.version)).sortWith((a, b) => a.version > b.version).headOption
           val z = t.flatMap(x => calcurator.get(x.id))
           z match {

@@ -46,7 +46,7 @@ object Fpms extends IOApp {
       */
       val app = new ServerApp[IO](repo, calcurator)
       BlazeServerBuilder[IO]
-        .bindHttp(8080, "localhost")
+        .bindHttp(8080, "0.0.0.0")
         .withHttpApp(app.ServerApp())
         .serve
         .compile

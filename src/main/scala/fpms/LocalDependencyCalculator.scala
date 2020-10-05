@@ -103,6 +103,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
         // 依存関係がない場合は無視
         if (deps.size != 0) {
           var currentSize = node.packages.size
+          if(count == 0) node.packages ++= node.directed
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
             // 更新されたやつだけ追加

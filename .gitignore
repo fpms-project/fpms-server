@@ -36,4 +36,4 @@ logs/*
 !logs/.gitkeep
 
 .vscode
-dump.rdb
+*.rdb

@@ -6,8 +6,6 @@ val Specs2Version = "4.1.0"
 
 val LogbackVersion = "1.2.3"
 
-val Redis4CatsVersion = "0.9.6"
-
 Compile / run / fork := true
 
 lazy val root = (project in file(".")).settings(
@@ -17,20 +15,15 @@ lazy val root = (project in file(".")).settings(
   fork in Runtime := true,
   libraryDependencies ++= Seq(
     "org.specs2" %% "specs2-core" % Specs2Version % "test",
-    "org.typelevel" %% "cats-effect" % "2.0.0",
     "org.typelevel" %% "cats-core" % "2.0.0",
-    "org.typelevel" %% "cats-mtl-core" % "0.7.0",
-    "co.fs2" %% "fs2-core" % "2.1.0",
-    "co.fs2" %% "fs2-io" % "2.1.0",
-    "co.fs2" %% "fs2-reactive-streams" % "2.1.0",
-    "co.fs2" %% "fs2-experimental" % "2.1.0",
+    "org.typelevel" %% "cats-effect" % "2.0.0",
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
     "com.typesafe" % "config" % "1.4.0",
-     "net.debasishg" %% "redisclient" % "3.30"
-  ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ Redis4CatsDeps,
+    "net.debasishg" %% "redisclient" % "3.30"
+  ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-  scalacOptions := defaultscalacOptions,
+  scalacOptions := defaultscalacOptions
 )
 
 run / javaOptions := Seq(
@@ -66,11 +59,6 @@ lazy val DoobieDeps = Seq(
   "org.tpolecat" %% "doobie-postgres-circe" % "0.8.8", // Postgres driver 42.2.9 + type mappings.
   "org.tpolecat" %% "doobie-quill" % "0.8.8" // Support for Quill 3.4.10
 )
-
-lazy val Redis4CatsDeps = Seq(
-  "dev.profunktor" %% "redis4cats-effects",
-  "dev.profunktor" %% "redis4cats-streams"
-).map(_ % Redis4CatsVersion)
 
 lazy val defaultscalacOptions = Seq(
   "-deprecation",

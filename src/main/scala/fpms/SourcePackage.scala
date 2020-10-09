@@ -33,7 +33,13 @@ object SourcePackage {
     def latestInFits(condition: String): Option[SourcePackage] = {
       Try {
         val range = Range(condition)
-        seq.filter(v => range.valid(v.version)).sortWith((l, r) => l.version > r.version).headOption
+        var x: Option[SourcePackage] = None
+        for (i <- 0 to seq.length - 1) {
+          if (range.valid(seq(i).version) && x.forall(v => seq(i).version > v.version)) {
+            x = Some(seq(i))
+          }
+        }
+        x
       }.getOrElse(None)
     }
   }

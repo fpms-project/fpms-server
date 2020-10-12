@@ -14,18 +14,16 @@ import scala.util.Try
 
 object SqlSaver {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
-  def saveJson(packages: Array[RootInterfaceN], transactor: Transactor[IO])(
+  def saveJson(packages: Array[RootInterfaceN], repo: SourcePackageSqlRepository[IO])(
       implicit
       ev: Bracket[IO, Throwable],
       F: ConcurrentEffect[IO]
   ) = {
-    val repo = new SourcePackageSqlRepository[IO](transactor)
     for (i <- 0 to packages.length - 1) {
-      if (i % 10000 == 0) logger.info(s"save in db: $i")
+      if (i % 10000 == 0) logger.info(s"save in db: ${i + 1}/${packages.length - 1}")
       val pack = packages(i)
-      val list = pack.versions
-        .map(x => Try { Some(SourcePackage(pack.name, x.version, x.dep, x.id)) }.getOrElse(None))
-        .flatten
+      val list =
+        pack.versions.map(x => Try { Some(SourcePackage(pack.name, x.version, x.dep, x.id)) }.getOrElse(None)).flatten
       repo.insertMulti(list.toList).unsafeRunSync()
     }
   }

@@ -29,6 +29,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
   def add(added: AddPackage): Unit = {}
 
   private def setup(): Unit = {
+    logger.info("start setup")
     val packs_map = JsonLoader.createMap()
     logger.info("complete convert to list")
     var depCache = scala.collection.mutable.Map.empty[(String, String), Int]

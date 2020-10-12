@@ -47,6 +47,7 @@ object JsonLoader {
   }
 
   def convertJson(start: Int = 0, end: Int = MAX_FILE_COUNT) {
+    logger.info("convert to json")
     var id = 0;
     for (i <- start to end) {
       val src = readFile(filepath(i))

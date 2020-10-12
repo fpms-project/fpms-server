@@ -19,7 +19,8 @@ lazy val root = (project in file(".")).settings(
     "org.typelevel" %% "cats-effect" % "2.0.0",
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
     "com.typesafe" % "config" % "1.4.0",
-    "net.debasishg" %% "redisclient" % "3.30"
+    "net.debasishg" %% "redisclient" % "3.30",
+    "com.github.scopt" %% "scopt" % "3.7.1"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),

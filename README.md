@@ -8,8 +8,6 @@ fpmsn
 - redis
 - postgres
 
-TODO
-
 # preparation
 
 - copy `src/main/resources/app_example.conf` to `src/main/resources/app.conf` and modify it 
@@ -20,7 +18,9 @@ specified in app.conf (`json.jsondir`)
 
 ## At first time
 
-TODO
+```bash
+sbt run init --prepare
+```
 
 ## From a second time
 

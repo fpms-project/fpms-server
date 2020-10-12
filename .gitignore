@@ -38,3 +38,14 @@ logs/*
 .vscode
 *.rdb
 app.conf
+
+
+# Created by https://www.toptal.com/developers/gitignore/api/metals
+# Edit at https://www.toptal.com/developers/gitignore?templates=metals
+
+### Metals ###
+.metals/
+.bloop/
+metals.sbt
+
+# End of https://www.toptal.com/developers/gitignore/api/metals

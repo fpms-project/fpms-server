@@ -1,16 +1,17 @@
 package fpms.json
 
+import scala.io.Source
+
+import com.typesafe.config.ConfigFactory
+import fpms.Package
 import io.circe.generic.auto._
 import io.circe.parser.decode
-import org.slf4j.LoggerFactory
-import java.nio.charset.StandardCharsets
-import java.net.URLEncoder
-import scala.io.Source
-import java.net.URLDecoder
-import com.typesafe.config.ConfigFactory
 import io.circe.syntax._
 import java.io.PrintWriter
-import fpms.Package
+import java.net.URLDecoder
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import org.slf4j.LoggerFactory
 
 object JsonLoader {
 

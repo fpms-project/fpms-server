@@ -1,23 +1,30 @@
 package fpms
 
-import org.http4s.HttpApp
+import scala.util.Try
+
+import cats.Applicative
+import cats.effect.ConcurrentEffect
+import cats.implicits._
+import com.github.sh4869.semver_parser.Range
+import com.github.sh4869.semver_parser.SemVer
+import io.circe._
 import io.circe.generic.auto._
+import io.circe.generic.semiauto._
 import io.circe.syntax._
-import io.circe._, io.circe.generic.semiauto._
+import org.http4s.HttpApp
+import org.http4s.HttpRoutes
+import org.http4s.Response
+import org.http4s.Status
 import org.http4s.circe._
 import org.http4s.dsl._
 import org.http4s.implicits._
-import org.http4s.HttpRoutes
-import cats.implicits._
-import fpms.repository.SourcePackageRepository
-import cats.effect.ConcurrentEffect
-import cats.Applicative
-import com.github.sh4869.semver_parser.Range
-import scala.util.Try
-import org.http4s.Response
-import org.http4s.Status
-import com.github.sh4869.semver_parser.SemVer
 import org.slf4j.LoggerFactory
+
+import fpms.calcurator.DependencyCalculator
+import fpms.calcurator.PackageNode
+import fpms.calcurator.AddPackage
+import fpms.repository.SourcePackageRepository
+
 
 class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(
     implicit F: ConcurrentEffect[F]
@@ -65,7 +72,6 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
 
   def ServerApp(): HttpApp[F] = {
     import dsl._
-    import fpms.Package._
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
     implicit val encoder = jsonEncoderOf[F, List[Package]]
     implicit val addDecoder = deriveDecoder[AddPackage]
@@ -98,3 +104,9 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       .orNotFound
   }
 }
+
+case class PackageNodeRespose(
+    src: Package,
+    directed: Seq[Package],
+    packages: Set[Package]
+)

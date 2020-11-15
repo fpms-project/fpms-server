@@ -1,21 +1,20 @@
 package fpms.repository.db
 
-import fpms.repository.SourcePackageRepository
+import cats._
+import cats.data.NonEmptyList
+import cats.effect.Bracket
+import cats.effect.ConcurrentEffect
+import cats.effect.implicits._
+import cats.implicits._
+import doobie.Write
 import doobie._
 import doobie.implicits._
 import doobie.postgres.circe.json.implicits._
-import doobie.Write
-import cats._
-import io.circe._
-import io.circe.syntax._
-import io.circe.generic.auto._
-import cats.implicits._
-import cats.effect.implicits._
-import cats.effect.Bracket
-import cats.effect.ConcurrentEffect
-import cats.data.NonEmptyList
 import fpms.Package
-import fs2.Stream
+import fpms.repository.SourcePackageRepository
+import io.circe._
+import io.circe.generic.auto._
+import io.circe.syntax._
 import org.slf4j.LoggerFactory
 
 class SourcePackageSqlRepository[F[_]: ConcurrentEffect](transactor: Transactor[F]) extends SourcePackageRepository[F] {
@@ -69,4 +68,5 @@ class SourcePackageSqlRepository[F[_]: ConcurrentEffect](transactor: Transactor[
     q.query[Max].unique.map(_.max).transact(transactor)
   }
 }
+
 case class Max(max: Int)

@@ -1,15 +1,19 @@
 package fpms
 
-import fpms.json.JsonLoader
-import org.slf4j.LoggerFactory
-import cats.effect.{IO, IOApp, ExitCode}
-import org.http4s.server.blaze.BlazeServerBuilder
+import cats.effect.ExitCode
+import cats.effect.IO
+import cats.effect.IOApp
 import cats.implicits._
+import com.redis.RedisClient
 import com.typesafe.config._
 import doobie._
+import fpms.calcurator.LocalDependencyCalculator
+import fpms.calcurator.RedisDependecyCalculator
+import fpms.json.JsonLoader
 import fpms.repository.SourcePackageRepository
 import fpms.repository.db.SourcePackageSqlRepository
-import com.redis.RedisClient
+import org.http4s.server.blaze.BlazeServerBuilder
+import org.slf4j.LoggerFactory
 import scopt.OptionParser
 
 object Fpms extends IOApp {

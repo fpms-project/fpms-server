@@ -10,7 +10,7 @@ import java.net.URLDecoder
 import com.typesafe.config.ConfigFactory
 import io.circe.syntax._
 import java.io.PrintWriter
-import fpms.SourcePackage
+import fpms.Package
 
 object JsonLoader {
 
@@ -65,17 +65,17 @@ object JsonLoader {
     }
   }
 
-  def createMap(): Map[String, Seq[SourcePackage]] = {
+  def createMap(): Map[String, Seq[Package]] = {
     val packs = loadIdList()
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[SourcePackage]]
+    val packs_map = scala.collection.mutable.Map.empty[String, Seq[Package]]
     for (i <- 0 to packs.size - 1) {
       if (i % 100000 == 0) logger.info(s"convert to List: $i")
       val pack = packs(i)
-      val seq = scala.collection.mutable.ArrayBuffer.empty[SourcePackage]
+      val seq = scala.collection.mutable.ArrayBuffer.empty[Package]
       for (j <- 0 to pack.versions.size - 1) {
         val d = pack.versions(j)
         try {
-          val info = SourcePackage(pack.name, d.version, d.dep, d.id)
+          val info = Package(pack.name, d.version, d.dep, d.id)
           seq += info
         } catch {
           case _: Throwable => Unit

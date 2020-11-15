@@ -57,10 +57,10 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
   def load(): Unit = ???
 
   def add(added: AddPackage): Unit = {
-    import fpms.SourcePackage._
+    import fpms.Package._
     // 追加リクエストのパッケージを追加
     val id = F.toIO(spRepo.getMaxId()).unsafeRunSync() + 1
-    val directly = scala.collection.mutable.Set.empty[SourcePackage]
+    val directly = scala.collection.mutable.Set.empty[Package]
     added.deps.foreach(v => {
       val targets = F.toIO(spRepo.findByName(v._1)).unsafeRunSync()
       targets.toSeq.latestInFits(v._2) match {
@@ -71,7 +71,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
         }
       }
     })
-    val addedPackage = SourcePackage(added.name, SemVer(added.version), added.deps, id)
+    val addedPackage = Package(added.name, SemVer(added.version), added.deps, id)
     F.toIO(spRepo.insert(addedPackage)).unsafeRunSync()
     logger.info(s"added package: ${addedPackage.name}@${addedPackage.version.original}")
 

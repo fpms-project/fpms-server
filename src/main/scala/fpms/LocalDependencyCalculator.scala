@@ -4,7 +4,7 @@ import org.slf4j.LoggerFactory
 import com.github.sh4869.semver_parser.Range
 import fpms.json.JsonLoader
 import scala.util.Try
-import fpms.SourcePackage._
+import fpms.Package._
 import io.circe.Json
 
 class LocalDependencyCalculator extends DependencyCalculator {

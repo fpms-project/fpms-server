@@ -29,7 +29,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
   ): F[PackageNodeRespose] = {
     logger.info(s"start get package from mysql")
     val p = for {
-      src <- repo.findById(node.src)
+      src <- repo.findOne(node.src)
       directed <- if (node.directed.isEmpty) {
         F.pure(Seq.empty)
       } else {
@@ -40,7 +40,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
       } else {
         repo.findByIds(node.packages.toList.toNel.get)
       }
-    } yield PackageNodeRespose(src.get.to, directed.map(_.to), set.toSet[SourcePackage].map(_.to))
+    } yield PackageNodeRespose(src.get, directed, set.toSet[Package])
     logger.info("end get package from mysql")
     p
   }
@@ -65,9 +65,9 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
 
   def ServerApp(): HttpApp[F] = {
     import dsl._
-    import fpms.SourcePackage._
+    import fpms.Package._
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
-    implicit val encoder = jsonEncoderOf[F, List[SourcePackageSave]]
+    implicit val encoder = jsonEncoderOf[F, List[Package]]
     implicit val addDecoder = deriveDecoder[AddPackage]
     implicit val decoderxx = jsonOf[F, AddPackage]
     HttpRoutes
@@ -75,7 +75,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
         case GET -> Root / "get_package" / name =>
           for {
             list <- repo.findByName(name)
-            x <- Ok(list.map(_.to))
+            x <- Ok(list)
           } yield x
         case GET -> Root / "id" / IntVar(id) =>
           calcurator.get(id) match {

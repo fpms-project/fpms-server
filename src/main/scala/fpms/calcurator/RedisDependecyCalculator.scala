@@ -1,14 +1,18 @@
-package fpms
+package fpms.calcurator
 
+import scala.util.Try
+
+import cats.effect.ConcurrentEffect
+import cats.implicits._
+import com.github.sh4869.semver_parser.Range
+import com.github.sh4869.semver_parser.SemVer
 import com.redis.RedisClient
 import com.redis.serialization.Parse.Implicits._
-import fpms.repository.SourcePackageRepository
+import fpms.Package
+import fpms.calcurator.VersionFinder._
 import fpms.json.JsonLoader
+import fpms.repository.SourcePackageRepository
 import org.slf4j.LoggerFactory
-import scala.util.Try
-import cats.implicits._
-import cats.effect.ConcurrentEffect
-import com.github.sh4869.semver_parser.{Range, SemVer}
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRepository[F])(
     implicit F: ConcurrentEffect[F]

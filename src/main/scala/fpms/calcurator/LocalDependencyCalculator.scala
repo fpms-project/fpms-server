@@ -1,11 +1,13 @@
-package fpms
+package fpms.calcurator
 
-import org.slf4j.LoggerFactory
-import com.github.sh4869.semver_parser.Range
-import fpms.json.JsonLoader
 import scala.util.Try
-import fpms.Package._
+
+import com.github.sh4869.semver_parser.Range
+import fpms.Package
+import fpms.calcurator.VersionFinder._
+import fpms.json.JsonLoader
 import io.circe.Json
+import org.slf4j.LoggerFactory
 
 class LocalDependencyCalculator extends DependencyCalculator {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
@@ -14,7 +16,6 @@ class LocalDependencyCalculator extends DependencyCalculator {
   def initialize(): Unit = {
     setup()
     algo()
-    ()
   }
 
   def getMap = internalMap.toMap
@@ -104,7 +105,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
         // 依存関係がない場合は無視
         if (deps.size != 0) {
           var currentSize = node.packages.size
-          if(count == 0) node.packages ++= node.directed
+          if (count == 0) node.packages ++= node.directed
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)
             // 更新されたやつだけ追加

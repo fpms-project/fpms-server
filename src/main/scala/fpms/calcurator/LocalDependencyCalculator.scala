@@ -14,7 +14,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
     algo()
   }
 
-  def getMap = internalMap.toMap
+  def getAll = internalMap.toMap
 
   def get(id: Int): Option[PackageNode] = internalMap.get(id)
 

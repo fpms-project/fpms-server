@@ -24,7 +24,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
     redis.flushall
     val x = new LocalDependencyCalculator
     x.initialize()
-    saveInitializeList(x.getMap)
+    saveInitializeList(x.getAll)
   }
 
   private def saveInitializeList(map: Map[Int, PackageNode]) {

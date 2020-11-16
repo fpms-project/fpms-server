@@ -14,7 +14,7 @@ trait LibraryPackageRepository[F[_]] {
   
   def findByName(name: String): F[List[LibraryPackage]]
 
-  def findByIds(ids: Seq[Int]): F[List[LibraryPackage]]
+  def findByIds(ids: List[Int]): F[List[LibraryPackage]]
 
   def findByDeps(depName: String): F[List[LibraryPackage]]
 

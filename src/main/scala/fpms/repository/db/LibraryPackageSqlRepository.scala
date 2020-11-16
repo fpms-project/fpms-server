@@ -51,7 +51,7 @@ class LibraryPackageSqlRepository[F[_]](transactor: Transactor[F])(
       .map(x => x.map(_.to))
       .transact(transactor)
 
-  def findByIds(ids: Seq[Int]): F[List[LibraryPackage]] =
+  def findByIds(ids: List[Int]): F[List[LibraryPackage]] =
     ids match {
       case head :: tl => {
         val q = sql"select name, version, deps, id from package where " ++ Fragments.in(fr"id", (head :: tl).toNel.get)

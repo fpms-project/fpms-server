@@ -29,8 +29,8 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
   ): F[PackageNodeRespose] =
     for {
       src <- repo.findOne(node.src)
-      directed <- repo.findByIds(node.directed)
-      set <- repo.findByIds(node.packages.toSeq)
+      directed <- repo.findByIds(node.directed.toList)
+      set <- repo.findByIds(node.packages.toList)
     } yield PackageNodeRespose(src.get, directed, set.toSet)
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {

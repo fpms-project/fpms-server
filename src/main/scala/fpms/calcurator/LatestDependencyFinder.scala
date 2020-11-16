@@ -2,7 +2,7 @@ package fpms.calcurator
 
 import fpms.LibraryPackage
 
-class LatestDependencyFinder(map: Map[String, Seq[LibraryPackage]]) {
+class LatestDependencyFinder(findFunc: (String) => Option[Seq[LibraryPackage]]) {
   import VersionFinder._
   private val depCache = scala.collection.mutable.Map.empty[(String, String), Int]
 
@@ -24,7 +24,7 @@ class LatestDependencyFinder(map: Map[String, Seq[LibraryPackage]]) {
   // nameとversionからその条件に合う最適な答えを出す
   private def findIdOfLatestByCondition(name: String, verisonCond: String): Int = {
     (for {
-      packs <- map.get(name)
+      packs <- findFunc(name)
       x <- packs.latestInFits(verisonCond)
     } yield {
       // キャッシュに保存

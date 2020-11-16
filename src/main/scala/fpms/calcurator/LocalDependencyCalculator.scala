@@ -26,7 +26,7 @@ class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
   private def setup(): Unit = {
     // 名前→
     val nameToPacksMap = JsonLoader.createNamePackagesMap()
-    val finder = new LatestDependencyFinder(nameToPacksMap)
+    val finder = new LatestDependencyFinder(nameToPacksMap.get)
     val packs_map_array = nameToPacksMap.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     var all_count = 0

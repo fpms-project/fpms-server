@@ -1,20 +1,12 @@
 package fpms
 
-import scala.util.Try
-
-import cats.Applicative
 import cats.effect.ConcurrentEffect
 import cats.implicits._
 import com.github.sh4869.semver_parser.Range
-import com.github.sh4869.semver_parser.SemVer
-import io.circe._
 import io.circe.generic.auto._
 import io.circe.generic.semiauto._
-import io.circe.syntax._
 import org.http4s.HttpApp
 import org.http4s.HttpRoutes
-import org.http4s.Response
-import org.http4s.Status
 import org.http4s.circe._
 import org.http4s.dsl._
 import org.http4s.implicits._
@@ -24,50 +16,50 @@ import fpms.calcurator.DependencyCalculator
 import fpms.calcurator.PackageNode
 import fpms.calcurator.AddPackage
 import fpms.repository.SourcePackageRepository
-
+import cats.data.EitherT
 
 class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(
     implicit F: ConcurrentEffect[F]
 ) {
   object dsl extends Http4sDsl[F]
   private val logger = LoggerFactory.getLogger(this.getClass)
+
   def convertToResponse(
       node: PackageNode
-  ): F[PackageNodeRespose] = {
-    logger.info(s"start get package from mysql")
-    val p = for {
+  ): F[PackageNodeRespose] =
+    for {
       src <- repo.findOne(node.src)
-      directed <- if (node.directed.isEmpty) {
-        F.pure(Seq.empty)
-      } else {
-        repo.findByIds(node.directed.toList.toNel.get)
-      }
-      set <- if (node.packages.isEmpty) {
-        F.pure(Set.empty)
-      } else {
-        repo.findByIds(node.packages.toList.toNel.get)
-      }
-    } yield PackageNodeRespose(src.get, directed, set.toSet[Package])
-    logger.info("end get package from mysql")
-    p
-  }
+      directed <- node.directed.toList.toNel.fold(F.pure(List.empty[Package]))(repo.findByIds)
+      set <- node.directed.toList.toNel.fold(F.pure(Set.empty[Package]))(v => repo.findByIds(v).map(_.toSet))
+    } yield PackageNodeRespose(src.get, directed, set)
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
-    Try {
-      logger.info(s"start get package from redis: ${name}@${range}")
-      val r = Range(range)
-      for {
-        packs <- repo.findByName(name)
-        x <- {
-          val t = packs.filter(x => r.valid(x.version)).sortWith((a, b) => a.version > b.version).headOption
-          val z = t.flatMap(x => calcurator.get(x.id))
-          z match {
-            case Some(value) => convertToResponse(value).map[Either[String, PackageNodeRespose]](x => Right(x))
-            case None        => F.pure[Either[String, PackageNodeRespose]](Left("get failed"))
+    logger.info(s"start get package from redis: ${name}@${range}")
+    (for {
+      // Rangeのパース
+      range <- EitherT.fromOption[F](Range.parse(range), "cannot parse the range")
+      // name パッケージを探す
+      packs <- EitherT(
+        repo.findByName(name).map {
+          _ match {
+            case head :: tl => Right(head :: tl)
+            case Nil        => Left(s"package ${name} is not found")
           }
         }
-      } yield x
-    }.getOrElse(F.pure[Either[String, PackageNodeRespose]](Left("range error")))
+      )
+      // バージョンを満たすパッケージを探す
+      target <- EitherT.fromOption[F](
+        packs.filter(x => range.valid(x.version)).sortWith((a, b) => a.version > b.version).headOption,
+        "No packages were found that met the version requirements"
+      )
+      // 計算結果とレスポンスの取得
+      res <- EitherT.fromOptionF[F, String, PackageNodeRespose](
+        calcurator
+          .get(target.id)
+          .fold(F.pure[Option[PackageNodeRespose]](None))(v => convertToResponse(v).map(x => Some(x))),
+        "calcuration not completed"
+      )
+    } yield res).value
   }
 
   def ServerApp(): HttpApp[F] = {
@@ -95,7 +87,6 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
           })
         case req @ POST -> Root / "add" => {
           for {
-            _ <- F.pure(logger.info(s"${req.headers}"))
             v <- req.as[AddPackage]
             x <- Ok(calcurator.add(v))
           } yield x

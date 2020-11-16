@@ -102,7 +102,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
       val ids = redis.get[String](directedKey(pack.id)).map(splitRedisData(_))
       if (ids.exists(_.nonEmpty)) {
         val idList = ids.get
-        val directed = F.toIO(spRepo.findByIds(idList.toList.toNel.get)).unsafeRunSync()
+        val directed = F.toIO(spRepo.findByIds(idList)).unsafeRunSync()
         val v = directed.filter(p => p.name == addedPackage.name && p.version < addedPackage.version).headOption
         if (v.isDefined) {
           // logger.info(s"update ${pack.name}@${pack.version.original}")

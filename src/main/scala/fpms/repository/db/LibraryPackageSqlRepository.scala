@@ -1,6 +1,5 @@
 package fpms.repository.db
 
-import cats.data.NonEmptyList
 import cats.effect.ConcurrentEffect
 import cats.implicits._
 import doobie._
@@ -10,7 +9,9 @@ import doobie.postgres.circe.json.implicits._
 import fpms.LibraryPackage
 import fpms.repository.LibraryPackageRepository
 
-class LibraryPackageSqlRepository[F[_]: ConcurrentEffect](transactor: Transactor[F]) extends LibraryPackageRepository[F] {
+class LibraryPackageSqlRepository[F[_]](transactor: Transactor[F])(
+    implicit F: ConcurrentEffect[F]
+) extends LibraryPackageRepository[F] {
 
   def insert(pack: LibraryPackage): F[Unit] = {
     val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"
@@ -50,10 +51,14 @@ class LibraryPackageSqlRepository[F[_]: ConcurrentEffect](transactor: Transactor
       .map(x => x.map(_.to))
       .transact(transactor)
 
-  def findByIds(ids: NonEmptyList[Int]): F[List[LibraryPackage]] = {
-    val q = sql"select name, version, deps, id from package where " ++ Fragments.in(fr"id", ids)
-    q.query[PackageSqlFormat].to[List].map(x => x.map(_.to)).transact(transactor)
-  }
+  def findByIds(ids: Seq[Int]): F[List[LibraryPackage]] =
+    ids match {
+      case head :: tl => {
+        val q = sql"select name, version, deps, id from package where " ++ Fragments.in(fr"id", (head :: tl).toNel.get)
+        q.query[PackageSqlFormat].to[List].map(x => x.map(_.to)).transact(transactor)
+      }
+      case Nil => F.pure(List.empty[LibraryPackage])
+    }
 
   def getMaxId(): F[Int] = {
     val q = sql"select MAX(id) from package"

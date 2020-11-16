@@ -1,6 +1,5 @@
 package fpms.repository
 
-import cats.data.NonEmptyList
 import fpms.LibraryPackage
 
 trait LibraryPackageRepository[F[_]] {
@@ -15,7 +14,7 @@ trait LibraryPackageRepository[F[_]] {
   
   def findByName(name: String): F[List[LibraryPackage]]
 
-  def findByIds(ids: NonEmptyList[Int]): F[List[LibraryPackage]]
+  def findByIds(ids: Seq[Int]): F[List[LibraryPackage]]
 
   def findByDeps(depName: String): F[List[LibraryPackage]]
 

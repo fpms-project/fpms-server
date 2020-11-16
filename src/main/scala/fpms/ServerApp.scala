@@ -29,9 +29,9 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
   ): F[PackageNodeRespose] =
     for {
       src <- repo.findOne(node.src)
-      directed <- node.directed.toList.toNel.fold(F.pure(List.empty[LibraryPackage]))(repo.findByIds)
-      set <- node.directed.toList.toNel.fold(F.pure(Set.empty[LibraryPackage]))(v => repo.findByIds(v).map(_.toSet))
-    } yield PackageNodeRespose(src.get, directed, set)
+      directed <- repo.findByIds(node.directed)
+      set <- repo.findByIds(node.packages.toSeq)
+    } yield PackageNodeRespose(src.get, directed, set.toSet)
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
     logger.info(s"start get package from redis: ${name}@${range}")

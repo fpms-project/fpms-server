@@ -3,6 +3,7 @@ package fpms.calcurator
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.json.JsonLoader
+import fpms.LibraryPackage
 
 class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
   private val internalMap = scala.collection.mutable.Map.empty[Int, PackageNode]
@@ -24,28 +25,25 @@ class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
   def add(added: AddPackage): Unit = {}
 
   private def setup(): Unit = {
-    // 名前→
+    logger.info("start setup")
     val nameToPacksMap = JsonLoader.createNamePackagesMap()
     val finder = new LatestDependencyFinder(nameToPacksMap.get)
-    val packs_map_array = nameToPacksMap.values.toArray
-    logger.info(s"pack_array_length : ${packs_map_array.size}")
-    var all_count = 0
-    for (i <- 0 to packs_map_array.length - 1) {
-      if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${internalMap.size}")
-      val a = packs_map_array(i)
-      all_count += a.length
-      for (j <- 0 to a.length - 1) {
-        val pack = a(j)
-        val id = pack.id
-        try {
-          val ids = finder.findIds(pack)
-          internalMap.update(id, PackageNode(id, ids, scala.collection.mutable.Set.empty))
-        } catch {
-          case _: Throwable => ()
-        }
+    val packsGroupedByName: List[List[LibraryPackage]] = nameToPacksMap.values.toList.map(_.toList)
+    logger.info(s"number of names of packages : ${packsGroupedByName.size}")
+    packsGroupedByName.zipWithIndex.foreach {
+      case (v, i) => {
+        if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${internalMap.size}")
+        v.foreach(pack => {
+          try {
+            val ids = finder.findIds(pack)
+            internalMap.update(pack.id, PackageNode(pack.id, ids, scala.collection.mutable.Set.empty))
+          } catch {
+            case _: Throwable => ()
+          }
+        })
       }
     }
-    logger.info(s"setup complete! ${internalMap.size}  - ${all_count}")
+    logger.info(s"setup complete!")
   }
 
   private def algo() {

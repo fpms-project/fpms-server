@@ -1,11 +1,10 @@
 package fpms.calcurator
 
-import org.slf4j.LoggerFactory
+import com.typesafe.scalalogging.LazyLogging
 
 import fpms.json.JsonLoader
 
-class LocalDependencyCalculator extends DependencyCalculator {
-  private lazy val logger = LoggerFactory.getLogger(this.getClass)
+class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
   private val internalMap = scala.collection.mutable.Map.empty[Int, PackageNode]
 
   def initialize(): Unit = {
@@ -25,11 +24,10 @@ class LocalDependencyCalculator extends DependencyCalculator {
   def add(added: AddPackage): Unit = {}
 
   private def setup(): Unit = {
-    logger.info("start setup")
-    val packs_map = JsonLoader.createMap()
-    val finder = new LatestDependencyFinder(packs_map)
-    logger.info("complete convert to list")
-    val packs_map_array = packs_map.values.toArray
+    // 名前→
+    val nameToPacksMap = JsonLoader.createNamePackagesMap()
+    val finder = new LatestDependencyFinder(nameToPacksMap)
+    val packs_map_array = nameToPacksMap.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     var all_count = 0
     for (i <- 0 to packs_map_array.length - 1) {
@@ -48,7 +46,6 @@ class LocalDependencyCalculator extends DependencyCalculator {
       }
     }
     logger.info(s"setup complete! ${internalMap.size}  - ${all_count}")
-    println("setup complete")
   }
 
   private def algo() {

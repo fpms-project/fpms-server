@@ -8,7 +8,7 @@ import com.github.sh4869.semver_parser.Range
 import com.github.sh4869.semver_parser.SemVer
 import com.redis.RedisClient
 import com.redis.serialization.Parse.Implicits._
-import org.slf4j.LoggerFactory
+import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
 import fpms.calcurator.VersionFinder._
@@ -16,9 +16,7 @@ import fpms.repository.LibraryPackageRepository
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
     implicit F: ConcurrentEffect[F]
-) extends DependencyCalculator {
-
-  private val logger = LoggerFactory.getLogger(this.getClass)
+) extends DependencyCalculator with LazyLogging {
 
   def initialize(): Unit = {
     redis.flushall

@@ -1,8 +1,10 @@
 package fpms
 
+import cats.data.EitherT
 import cats.effect.ConcurrentEffect
 import cats.implicits._
 import com.github.sh4869.semver_parser.Range
+import com.typesafe.scalalogging.LazyLogging
 import io.circe.generic.auto._
 import io.circe.generic.semiauto._
 import org.http4s.HttpApp
@@ -10,19 +12,16 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl._
 import org.http4s.implicits._
-import org.slf4j.LoggerFactory
 
+import fpms.calcurator.AddPackage
 import fpms.calcurator.DependencyCalculator
 import fpms.calcurator.PackageNode
-import fpms.calcurator.AddPackage
 import fpms.repository.LibraryPackageRepository
-import cats.data.EitherT
 
 class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator)(
     implicit F: ConcurrentEffect[F]
-) {
+) extends LazyLogging {
   object dsl extends Http4sDsl[F]
-  private val logger = LoggerFactory.getLogger(this.getClass)
 
   def convertToResponse(
       node: PackageNode

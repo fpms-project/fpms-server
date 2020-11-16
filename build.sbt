@@ -1,9 +1,6 @@
 val Http4sVersion = "0.21.0"
-
 val CirceVersion = "0.12.0"
-
 val Specs2Version = "4.1.0"
-
 val LogbackVersion = "1.2.3"
 
 Compile / run / fork := true
@@ -11,7 +8,7 @@ Compile / run / fork := true
 lazy val root = (project in file(".")).settings(
   name := "fpms",
   version := "0.1",
-  scalaVersion := "2.12.11",
+  scalaVersion := "2.12.12",
   fork in Runtime := true,
   libraryDependencies ++= Seq(
     "org.specs2" %% "specs2-core" % Specs2Version % "test",
@@ -71,7 +68,8 @@ lazy val defaultscalacOptions = Seq(
   "-feature",
   "-Ypartial-unification",
   "-Xfatal-warnings",
-  "log4j2.debug"
+  "log4j2.debug",
+  "-Ywarn-unused"
 )
 
 assemblyMergeStrategy in assembly := {

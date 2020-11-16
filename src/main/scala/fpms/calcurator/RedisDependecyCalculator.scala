@@ -1,16 +1,20 @@
-package fpms
+package fpms.calcurator
 
+import scala.util.Try
+
+import cats.effect.ConcurrentEffect
+import cats.implicits._
+import com.github.sh4869.semver_parser.Range
+import com.github.sh4869.semver_parser.SemVer
 import com.redis.RedisClient
 import com.redis.serialization.Parse.Implicits._
-import fpms.repository.SourcePackageRepository
-import fpms.json.JsonLoader
 import org.slf4j.LoggerFactory
-import scala.util.Try
-import cats.implicits._
-import cats.effect.ConcurrentEffect
-import com.github.sh4869.semver_parser.{Range, SemVer}
 
-class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRepository[F])(
+import fpms.LibraryPackage
+import fpms.calcurator.VersionFinder._
+import fpms.repository.LibraryPackageRepository
+
+class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
     implicit F: ConcurrentEffect[F]
 ) extends DependencyCalculator {
 
@@ -57,10 +61,9 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
   def load(): Unit = ???
 
   def add(added: AddPackage): Unit = {
-    import fpms.SourcePackage._
     // 追加リクエストのパッケージを追加
     val id = F.toIO(spRepo.getMaxId()).unsafeRunSync() + 1
-    val directly = scala.collection.mutable.Set.empty[SourcePackage]
+    val directly = scala.collection.mutable.Set.empty[LibraryPackage]
     added.deps.foreach(v => {
       val targets = F.toIO(spRepo.findByName(v._1)).unsafeRunSync()
       targets.toSeq.latestInFits(v._2) match {
@@ -71,7 +74,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
         }
       }
     })
-    val addedPackage = SourcePackage(added.name, SemVer(added.version), added.deps, id)
+    val addedPackage = LibraryPackage(added.name, SemVer(added.version), added.deps, id)
     F.toIO(spRepo.insert(addedPackage)).unsafeRunSync()
     logger.info(s"added package: ${addedPackage.name}@${addedPackage.version.original}")
 
@@ -99,7 +102,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
       val ids = redis.get[String](directedKey(pack.id)).map(splitRedisData(_))
       if (ids.exists(_.nonEmpty)) {
         val idList = ids.get
-        val directed = F.toIO(spRepo.findByIds(idList.toList.toNel.get)).unsafeRunSync()
+        val directed = F.toIO(spRepo.findByIds(idList.toList)).unsafeRunSync()
         val v = directed.filter(p => p.name == addedPackage.name && p.version < addedPackage.version).headOption
         if (v.isDefined) {
           // logger.info(s"update ${pack.name}@${pack.version.original}")
@@ -139,10 +142,10 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
       var complete = false
       var updated_pre = Set.empty[Int]
       while (!complete) {
-        var updatecount = 0
+        // var updatecount = 0
         complete = true
         var pack_count_in_loop = 0
-        var updated = scala.collection.mutable.Set.empty[Int]
+        val updated = scala.collection.mutable.Set.empty[Int]
         allValidId.foreach(id => {
           if (pack_count_in_loop % 1000000 == 0) logger.info(s"${pack_count_in_loop}, ${updated.size}")
           val directly =
@@ -172,7 +175,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRe
       // redis.mset(updatedPackIndirectlyDepsMap.map(v => (directedKey(v._1), v._2.mkString(","))).toSeq: _*)
       logger.info(s"save about indirectly dep map")
       System.gc()
-      val updated_pack = allIndirectDepMap.toSeq
+      allIndirectDepMap.toSeq
         .map(v => (packagesKey(v._1), v._2.mkString(",")))
         .grouped(100)
         .zipWithIndex

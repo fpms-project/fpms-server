@@ -1,6 +1,9 @@
 package fpms.json
 
-import io.circe.{Decoder, Encoder, Json}
+import io.circe.Decoder
+import io.circe.Encoder
+import io.circe.Json
+
 case class RootInterface(
     name: String,
     versions: Seq[NpmPackageVersion]

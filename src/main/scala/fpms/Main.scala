@@ -1,16 +1,19 @@
 package fpms
 
-import fpms.json.JsonLoader
-import org.slf4j.LoggerFactory
-import cats.effect.{IO, IOApp, ExitCode}
-import org.http4s.server.blaze.BlazeServerBuilder
+import cats.effect.ExitCode
+import cats.effect.IO
+import cats.effect.IOApp
 import cats.implicits._
+import com.redis.RedisClient
 import com.typesafe.config._
 import doobie._
-import fpms.repository.SourcePackageRepository
-import fpms.repository.db.SourcePackageSqlRepository
-import com.redis.RedisClient
+import org.http4s.server.blaze.BlazeServerBuilder
 import scopt.OptionParser
+
+import fpms.calcurator.LocalDependencyCalculator
+import fpms.calcurator.RedisDependecyCalculator
+import fpms.json.JsonLoader
+import fpms.repository.db.LibraryPackageSqlRepository
 
 object Fpms extends IOApp {
 
@@ -20,7 +23,6 @@ object Fpms extends IOApp {
       prepare: Boolean = false
   )
 
-  private val logger = LoggerFactory.getLogger(this.getClass)
   val parser = new OptionParser[ArgOptionConfig]("fmpsn") {
     head("fpmsn", "0.1.0")
     opt[Unit]("in-memory")
@@ -28,7 +30,7 @@ object Fpms extends IOApp {
       .action((_, c) => c.copy(calcurator = "memory"))
     help("help").text("prints this usage text")
     cmd("init")
-      .action((m, c) => c.copy(mode = "init"))
+      .action((_, c) => c.copy(mode = "init"))
       .text("initalize data and run server")
       .children(
         opt[Unit]("prepare")
@@ -41,7 +43,7 @@ object Fpms extends IOApp {
     parser.parse(args, ArgOptionConfig()) match {
       case Some(arg) => {
         val config = ConfigFactory.load("app.conf")
-        val repo = new SourcePackageSqlRepository[IO](
+        val repo = new LibraryPackageSqlRepository[IO](
           Transactor.fromDriverManager[IO](
             config.getString("server.postgresql.driver"),
             config.getString("server.postgresql.url"),

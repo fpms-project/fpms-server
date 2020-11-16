@@ -2,7 +2,6 @@ package fpms.calcurator
 
 import org.slf4j.LoggerFactory
 
-import fpms.calcurator.VersionFinder._
 import fpms.json.JsonLoader
 
 class LocalDependencyCalculator extends DependencyCalculator {
@@ -28,8 +27,8 @@ class LocalDependencyCalculator extends DependencyCalculator {
   private def setup(): Unit = {
     logger.info("start setup")
     val packs_map = JsonLoader.createMap()
+    val finder = new LatestDependencyFinder(packs_map)
     logger.info("complete convert to list")
-    val depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     var all_count = 0
@@ -40,39 +39,11 @@ class LocalDependencyCalculator extends DependencyCalculator {
       for (j <- 0 to a.length - 1) {
         val pack = a(j)
         val id = pack.id
-        if (pack.deps.isEmpty) {
-          internalMap.update(id, PackageNode(id, Seq.empty, scala.collection.mutable.Set.empty))
-        } else {
-          val depsx = scala.collection.mutable.ArrayBuffer.empty[Int]
-          depsx.sizeHint(pack.deps.size)
-          var failed = false
-          var k = pack.deps.size - 1
-          val seq = pack.deps.toSeq
-          while (!failed && k > -1) {
-            val d = seq(k)
-            val cache = depCache.get(d)
-            if (cache.isEmpty) {
-              val depP = for {
-                ds <- packs_map.get(d._1)
-                depP <- ds.latestInFits(d._2.replace("^latest$", "*"))
-              } yield depP
-              depP match {
-                case Some(v) => {
-                  depsx += v.id
-                  depCache.update(d, v.id)
-                }
-                case None => {
-                  failed = true
-                }
-              }
-            } else {
-              depsx += cache.get
-            }
-            k -= 1
-          }
-          if (!failed) {
-            internalMap.update(id, PackageNode(id, depsx.toArray.toSeq, scala.collection.mutable.Set.empty))
-          }
+        try {
+          val ids = finder.findIds(pack)
+          internalMap.update(id, PackageNode(id, ids, scala.collection.mutable.Set.empty))
+        } catch {
+          case _: Throwable => ()
         }
       }
     }

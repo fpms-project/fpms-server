@@ -1,13 +1,9 @@
 package fpms.calcurator
 
-import scala.util.Try
+import org.slf4j.LoggerFactory
 
-import com.github.sh4869.semver_parser.Range
-import fpms.Package
 import fpms.calcurator.VersionFinder._
 import fpms.json.JsonLoader
-import io.circe.Json
-import org.slf4j.LoggerFactory
 
 class LocalDependencyCalculator extends DependencyCalculator {
   private lazy val logger = LoggerFactory.getLogger(this.getClass)
@@ -33,7 +29,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
     logger.info("start setup")
     val packs_map = JsonLoader.createMap()
     logger.info("complete convert to list")
-    var depCache = scala.collection.mutable.Map.empty[(String, String), Int]
+    val depCache = scala.collection.mutable.Map.empty[(String, String), Int]
     val packs_map_array = packs_map.values.toArray
     logger.info(s"pack_array_length : ${packs_map_array.size}")
     var all_count = 0
@@ -56,7 +52,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
             val d = seq(k)
             val cache = depCache.get(d)
             if (cache.isEmpty) {
-              var depP = for {
+              val depP = for {
                 ds <- packs_map.get(d._1)
                 depP <- ds.latestInFits(d._2.replace("^latest$", "*"))
               } yield depP
@@ -90,7 +86,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
     logger.info("start loop")
     var count = 0
     val maps = internalMap.values.toArray
-    var updateIdSets = scala.collection.mutable.TreeSet.empty[Int]
+    val updateIdSets = scala.collection.mutable.TreeSet.empty[Int]
     var complete = false
     while (!complete) {
       logger.info(s"start   lap ${count}")
@@ -104,7 +100,7 @@ class LocalDependencyCalculator extends DependencyCalculator {
         val deps = node.directed
         // 依存関係がない場合は無視
         if (deps.size != 0) {
-          var currentSize = node.packages.size
+          val currentSize = node.packages.size
           if (count == 0) node.packages ++= node.directed
           for (j <- 0 to deps.size - 1) {
             val d = deps(j)

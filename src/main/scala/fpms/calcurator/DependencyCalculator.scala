@@ -1,14 +1,12 @@
 package fpms.calcurator
 
-import com.github.sh4869.semver_parser.SemVer
-import fpms.Package
-
 trait DependencyCalculator {
 
   /**
     * initalize data
     */
   def initialize(): Unit
+
   /**
     * get package data
     *
@@ -16,10 +14,12 @@ trait DependencyCalculator {
     * @return
     */
   def get(id: Int): Option[PackageNode]
+
   /**
     * load data
     */
   def load(): Unit
+
   /**
     * add datas
     *
@@ -35,4 +35,3 @@ case class PackageNode(
     directed: Seq[Int],
     packages: scala.collection.mutable.Set[Int]
 )
-

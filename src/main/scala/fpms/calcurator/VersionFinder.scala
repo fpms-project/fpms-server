@@ -4,14 +4,14 @@ import scala.util.Try
 
 import com.github.sh4869.semver_parser.Range
 
-import fpms.Package
+import fpms.LibraryPackage
 
 object VersionFinder {
-  implicit class Versions(seq: Seq[Package]) {
-    def latestInFits(condition: String): Option[Package] = {
+  implicit class Versions(seq: Seq[LibraryPackage]) {
+    def latestInFits(condition: String): Option[LibraryPackage] = {
       Try {
         val range = Range(condition)
-        var x: Option[Package] = None
+        var x: Option[LibraryPackage] = None
         for (i <- 0 to seq.length - 1) {
           if (range.valid(seq(i).version) && x.forall(v => seq(i).version > v.version)) {
             x = Some(seq(i))

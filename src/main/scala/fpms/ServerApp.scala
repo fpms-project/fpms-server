@@ -29,8 +29,8 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
   ): F[PackageNodeRespose] =
     for {
       src <- repo.findOne(node.src)
-      directed <- node.directed.toList.toNel.fold(F.pure(List.empty[Package]))(repo.findByIds)
-      set <- node.directed.toList.toNel.fold(F.pure(Set.empty[Package]))(v => repo.findByIds(v).map(_.toSet))
+      directed <- node.directed.toList.toNel.fold(F.pure(List.empty[LibraryPackage]))(repo.findByIds)
+      set <- node.directed.toList.toNel.fold(F.pure(Set.empty[LibraryPackage]))(v => repo.findByIds(v).map(_.toSet))
     } yield PackageNodeRespose(src.get, directed, set)
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
@@ -65,7 +65,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
   def ServerApp(): HttpApp[F] = {
     import dsl._
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
-    implicit val encoder = jsonEncoderOf[F, List[Package]]
+    implicit val encoder = jsonEncoderOf[F, List[LibraryPackage]]
     implicit val addDecoder = deriveDecoder[AddPackage]
     implicit val decoderxx = jsonOf[F, AddPackage]
     HttpRoutes
@@ -97,7 +97,7 @@ class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCa
 }
 
 case class PackageNodeRespose(
-    src: Package,
-    directed: Seq[Package],
-    packages: Set[Package]
+    src: LibraryPackage,
+    directed: Seq[LibraryPackage],
+    packages: Set[LibraryPackage]
 )

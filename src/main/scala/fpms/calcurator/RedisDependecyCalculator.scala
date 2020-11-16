@@ -12,9 +12,9 @@ import org.slf4j.LoggerFactory
 
 import fpms.LibraryPackage
 import fpms.calcurator.VersionFinder._
-import fpms.repository.SourcePackageRepository
+import fpms.repository.LibraryPackageRepository
 
-class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: SourcePackageRepository[F])(
+class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
     implicit F: ConcurrentEffect[F]
 ) extends DependencyCalculator {
 

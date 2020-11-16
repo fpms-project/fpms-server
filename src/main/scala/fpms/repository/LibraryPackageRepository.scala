@@ -3,7 +3,7 @@ package fpms.repository
 import cats.data.NonEmptyList
 import fpms.LibraryPackage
 
-trait SourcePackageRepository[F[_]] {
+trait LibraryPackageRepository[F[_]] {
 
   def insert(pack: LibraryPackage): F[Unit]
 

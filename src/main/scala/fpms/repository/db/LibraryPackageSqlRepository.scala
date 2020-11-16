@@ -8,9 +8,9 @@ import doobie.implicits._
 import doobie.postgres.circe.json.implicits._
 
 import fpms.LibraryPackage
-import fpms.repository.SourcePackageRepository
+import fpms.repository.LibraryPackageRepository
 
-class SourcePackageSqlRepository[F[_]: ConcurrentEffect](transactor: Transactor[F]) extends SourcePackageRepository[F] {
+class LibraryPackageSqlRepository[F[_]: ConcurrentEffect](transactor: Transactor[F]) extends LibraryPackageRepository[F] {
 
   def insert(pack: LibraryPackage): F[Unit] = {
     val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"

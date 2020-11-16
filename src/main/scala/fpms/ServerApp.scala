@@ -15,10 +15,10 @@ import org.slf4j.LoggerFactory
 import fpms.calcurator.DependencyCalculator
 import fpms.calcurator.PackageNode
 import fpms.calcurator.AddPackage
-import fpms.repository.SourcePackageRepository
+import fpms.repository.LibraryPackageRepository
 import cats.data.EitherT
 
-class ServerApp[F[_]](repo: SourcePackageRepository[F], calcurator: DependencyCalculator)(
+class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator)(
     implicit F: ConcurrentEffect[F]
 ) {
   object dsl extends Http4sDsl[F]

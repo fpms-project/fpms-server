@@ -13,7 +13,7 @@ import scopt.OptionParser
 import fpms.calcurator.LocalDependencyCalculator
 import fpms.calcurator.RedisDependecyCalculator
 import fpms.json.JsonLoader
-import fpms.repository.db.SourcePackageSqlRepository
+import fpms.repository.db.LibraryPackageSqlRepository
 
 object Fpms extends IOApp {
 
@@ -43,7 +43,7 @@ object Fpms extends IOApp {
     parser.parse(args, ArgOptionConfig()) match {
       case Some(arg) => {
         val config = ConfigFactory.load("app.conf")
-        val repo = new SourcePackageSqlRepository[IO](
+        val repo = new LibraryPackageSqlRepository[IO](
           Transactor.fromDriverManager[IO](
             config.getString("server.postgresql.driver"),
             config.getString("server.postgresql.url"),

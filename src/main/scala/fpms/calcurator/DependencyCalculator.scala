@@ -13,7 +13,7 @@ trait DependencyCalculator {
     * @param id
     * @return
     */
-  def get(id: Int): Option[PackageNode]
+  def get(id: Int): Option[PackageCalcuratedDeps]
 
   /**
     * load data
@@ -34,4 +34,9 @@ case class PackageNode(
     src: Int,
     directed: Seq[Int],
     packages: scala.collection.mutable.Set[Int]
+)
+
+case class PackageCalcuratedDeps(
+    direct: Seq[Int],
+    all: Seq[Int]
 )

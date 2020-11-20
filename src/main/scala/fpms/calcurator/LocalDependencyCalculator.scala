@@ -25,6 +25,6 @@ class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
     logger.info("start setup")
     val idMapGenerator = new JsonLatestDependencyIdListMapGenerator()
     val idMap = idMapGenerator.gen
-    map = new AllDepsCalcurator().calcAllDep(idMap)
+    map = new AllDepsCalcurator(idMap).calcAllDep()
   }
 }

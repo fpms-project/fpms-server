@@ -6,11 +6,10 @@ import LatestDependencyIdListMapGenerator.LatestDependencyIdListMap
 import AllDepsCalcurator._
 
 class AllDepsCalcurator extends LazyLogging {
-
+  
   def calcAllDep(latestDepenencyListMap: LatestDependencyIdListMap): PackageCalcuratedDepsMap = {
     System.gc()
-    val allMap: Map[Int, scala.collection.mutable.Set[Int]] =
-      latestDepenencyListMap.map(v => (v._1, scala.collection.mutable.Set.empty[Int])).toMap
+    val allMap: Map[Int, scala.collection.mutable.Set[Int]] = latestDepenencyListMap.map(v => (v._1, scala.collection.mutable.Set.empty[Int])).toMap
     var updated = updateMapInfo(latestDepenencyListMap, allMap, Set.empty, true)
     while (updated.nonEmpty) {
       logger.info(s"updated size: ${updated.size}")
@@ -28,13 +27,14 @@ class AllDepsCalcurator extends LazyLogging {
       first: Boolean = false
   ): Set[Int] = {
     val updated = scala.collection.mutable.Set.empty[Int]
-    val checkFunction: (Int => Boolean) = 
+    val checkFunction = (v: Int) => {
       // 一定割合以上なら全部足すことにしてみる
-      if (beforeUpdated.size / latestDepenencyListMap.size > 0.5) {
-        (_) => true
+      if(beforeUpdated.size / latestDepenencyListMap.size > 0.5) {
+        true
       } else {
-        beforeUpdated.contains
+        beforeUpdated.contains(v)
       }
+    } 
     latestDepenencyListMap.toList.map {
       // TODO: 並列化
       // beforeUpdatedは書き込みなしなのでそのまま使える
@@ -46,14 +46,20 @@ class AllDepsCalcurator extends LazyLogging {
             allMap.get(id).get ++= deps.toSet
             updated += id
           } else {
-            val oldSize = allMap.get(id).size
-            deps.foreach {tid => 
-              if(checkFunction(tid)){
-                allMap.get(id).get ++= allMap.get(tid).get
+            val old = allMap.get(id)
+            val result = deps.map { tid =>
+              // oldをあとから足すので、前アップデートされていなかったら足す必要がない。
+              if (checkFunction(tid)) {
+                allMap.get(tid).getOrElse(Seq.empty)
+              } else {
+                Seq.empty
               }
-            }
+            }.flatten.toSet ++ old.getOrElse(Set.empty)
             // oldが存在しなかったらもしくは更新されていたらtrue
-            if(oldSize > allMap.get(id).get.size) updated += id
+            if (old.forall(x => result.size > x.size)) {
+              updated += id
+              allMap.get(id).get ++= result
+            }
           }
         }
       }

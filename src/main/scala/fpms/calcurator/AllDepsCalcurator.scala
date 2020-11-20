@@ -6,13 +6,14 @@ import LatestDependencyIdListMapGenerator.LatestDependencyIdListMap
 import AllDepsCalcurator._
 
 class AllDepsCalcurator extends LazyLogging {
-  private lazy val allMap = scala.collection.mutable.Map.empty[Int, Set[Int]]
-
+  
   def calcAllDep(latestDepenencyListMap: LatestDependencyIdListMap): PackageCalcuratedDepsMap = {
-    var updated = updateMapInfo(latestDepenencyListMap, Set.empty, true)
+    System.gc()
+    val allMap: Map[Int, scala.collection.mutable.Set[Int]] = latestDepenencyListMap.map(v => (v._1, scala.collection.mutable.Set.empty[Int])).toMap
+    var updated = updateMapInfo(latestDepenencyListMap, allMap, Set.empty, true)
     while (updated.nonEmpty) {
       logger.info(s"updated size: ${updated.size}")
-      updated = updateMapInfo(latestDepenencyListMap, updated)
+      updated = updateMapInfo(latestDepenencyListMap, allMap, updated)
     }
     latestDepenencyListMap
       .map(v => (v._1, PackageCalcuratedDeps(v._2, allMap.get(v._1).map(_.toList).getOrElse(Seq.empty))))
@@ -21,6 +22,7 @@ class AllDepsCalcurator extends LazyLogging {
 
   private def updateMapInfo(
       latestDepenencyListMap: LatestDependencyIdListMap,
+      allMap: Map[Int, scala.collection.mutable.Set[Int]],
       beforeUpdated: Set[Int],
       first: Boolean = false
   ): Set[Int] = {
@@ -41,7 +43,7 @@ class AllDepsCalcurator extends LazyLogging {
         if (deps.size > 0) {
           // 初回は自分の子要素を追加して終わり
           if (first) {
-            allMap.update(id, deps.toSet)
+            allMap.get(id).get ++= deps.toSet
             updated += id
           } else {
             val old = allMap.get(id)
@@ -53,10 +55,10 @@ class AllDepsCalcurator extends LazyLogging {
                 Seq.empty
               }
             }.flatten.toSet ++ old.getOrElse(Set.empty)
-            allMap.update(id, result)
             // oldが存在しなかったらもしくは更新されていたらtrue
             if (old.forall(x => result.size > x.size)) {
               updated += id
+              allMap.get(id).get ++= result
             }
           }
         }

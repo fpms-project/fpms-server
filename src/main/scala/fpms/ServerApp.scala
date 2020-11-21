@@ -1,8 +1,10 @@
 package fpms
 
+import cats.data.EitherT
 import cats.effect.ConcurrentEffect
 import cats.implicits._
 import com.github.sh4869.semver_parser.Range
+import com.typesafe.scalalogging.LazyLogging
 import io.circe.generic.auto._
 import io.circe.generic.semiauto._
 import org.http4s.HttpApp
@@ -10,27 +12,22 @@ import org.http4s.HttpRoutes
 import org.http4s.circe._
 import org.http4s.dsl._
 import org.http4s.implicits._
-import org.slf4j.LoggerFactory
 
-import fpms.calcurator.DependencyCalculator
-import fpms.calcurator.PackageNode
 import fpms.calcurator.AddPackage
+import fpms.calcurator.DependencyCalculator
 import fpms.repository.LibraryPackageRepository
-import cats.data.EitherT
+import fpms.calcurator.PackageCalcuratedDeps
 
 class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator)(
     implicit F: ConcurrentEffect[F]
-) {
+) extends LazyLogging {
   object dsl extends Http4sDsl[F]
-  private val logger = LoggerFactory.getLogger(this.getClass)
 
-  def convertToResponse(
-      node: PackageNode
-  ): F[PackageNodeRespose] =
+  def convertToResponse(target: Int, node: PackageCalcuratedDeps): F[PackageNodeRespose] =
     for {
-      src <- repo.findOne(node.src)
-      directed <- repo.findByIds(node.directed.toList)
-      set <- repo.findByIds(node.packages.toList)
+      src <- repo.findOne(target)
+      directed <- repo.findByIds(node.direct.toList)
+      set <- repo.findByIds(node.all.toList)
     } yield PackageNodeRespose(src.get, directed, set.toSet)
 
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
@@ -56,7 +53,7 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
       res <- EitherT.fromOptionF[F, String, PackageNodeRespose](
         calcurator
           .get(target.id)
-          .fold(F.pure[Option[PackageNodeRespose]](None))(v => convertToResponse(v).map(x => Some(x))),
+          .fold(F.pure[Option[PackageNodeRespose]](None))(v => convertToResponse(target.id, v).map(x => Some(x))),
         "calcuration not completed"
       )
     } yield res).value
@@ -77,7 +74,7 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
           } yield x
         case GET -> Root / "id" / IntVar(id) =>
           calcurator.get(id) match {
-            case Some(value) => Ok(convertToResponse(value))
+            case Some(value) => Ok(convertToResponse(id, value))
             case None        => NotFound()
           }
         case GET -> Root / "get" / name / range =>
@@ -97,7 +94,7 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
 }
 
 case class PackageNodeRespose(
-    src: LibraryPackage,
+    target: LibraryPackage,
     directed: Seq[LibraryPackage],
     packages: Set[LibraryPackage]
 )

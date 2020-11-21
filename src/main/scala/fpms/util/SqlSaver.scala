@@ -1,14 +1,15 @@
 package fpms.util
 
+import scala.util.Try
+
+import cats.effect.IO
+import com.typesafe.scalalogging.LazyLogging
+
 import fpms._
 import fpms.json.RootInterfaceN
 import fpms.repository.db.LibraryPackageSqlRepository
-import cats.effect.IO
-import org.slf4j.LoggerFactory
-import scala.util.Try
 
-object SqlSaver {
-  private lazy val logger = LoggerFactory.getLogger(this.getClass)
+object SqlSaver extends LazyLogging {
   def saveJson(packages: Array[RootInterfaceN], repo: LibraryPackageSqlRepository[IO]) = {
     for (i <- 0 to packages.length - 1) {
       if (i % 10000 == 0) logger.info(s"save in db: ${i + 1}/${packages.length - 1}")

@@ -9,13 +9,12 @@ import io.circe.syntax._
 import java.io.PrintWriter
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import org.slf4j.LoggerFactory
 
 import fpms.LibraryPackage
+import com.typesafe.scalalogging.LazyLogging
 
-object JsonLoader {
+object JsonLoader extends LazyLogging {
 
-  private lazy val logger = LoggerFactory.getLogger(this.getClass)
   private lazy val config = ConfigFactory.load("app.conf").getConfig("json")
   lazy val MAX_FILE_COUNT = config.getInt("filenum")
 
@@ -34,9 +33,9 @@ object JsonLoader {
   }
 
   def loadIdList(start: Int = 0, end: Int = MAX_FILE_COUNT): Array[RootInterfaceN] = {
+    logger.info(s"load json filenum:  ${end}")
     var lists = Seq.empty[Option[List[RootInterfaceN]]]
     for (i <- start to end) {
-      logger.info(s"json file: ${i}/${end}")
       val src = readFile(s"${config.getString("idjsondir")}$i.json")
       val dec = decode[List[RootInterfaceN]](src) match {
         case Right(v) => Some(v)
@@ -66,11 +65,11 @@ object JsonLoader {
     }
   }
 
-  def createMap(): Map[String, Seq[LibraryPackage]] = {
+  def createNamePackagesMap(): Map[String, Seq[LibraryPackage]] = {
     val packs = loadIdList()
+    logger.info("loaded json files")
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]]
     for (i <- 0 to packs.size - 1) {
-      if (i % 100000 == 0) logger.info(s"convert to List: $i")
       val pack = packs(i)
       val seq = scala.collection.mutable.ArrayBuffer.empty[LibraryPackage]
       for (j <- 0 to pack.versions.size - 1) {
@@ -84,6 +83,7 @@ object JsonLoader {
       }
       packs_map += (pack.name -> seq.toSeq)
     }
+    logger.info("complete convert to list")
     packs_map.toMap
   }
 

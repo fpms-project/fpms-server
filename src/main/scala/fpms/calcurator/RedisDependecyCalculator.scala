@@ -8,7 +8,7 @@ import com.github.sh4869.semver_parser.Range
 import com.github.sh4869.semver_parser.SemVer
 import com.redis.RedisClient
 import com.redis.serialization.Parse.Implicits._
-import org.slf4j.LoggerFactory
+import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
 import fpms.calcurator.VersionFinder._
@@ -16,18 +16,17 @@ import fpms.repository.LibraryPackageRepository
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
     implicit F: ConcurrentEffect[F]
-) extends DependencyCalculator {
-
-  private val logger = LoggerFactory.getLogger(this.getClass)
+) extends DependencyCalculator
+    with LazyLogging {
 
   def initialize(): Unit = {
     redis.flushall
     val x = new LocalDependencyCalculator
     x.initialize()
-    saveInitializeList(x.getMap)
+    saveInitializeList(x.getAll)
   }
 
-  private def saveInitializeList(map: Map[Int, PackageNode]) {
+  private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) {
     // すべてのIDを保存
     redis.set(allIdSetKey, map.keySet.mkString(","))
     map
@@ -38,10 +37,10 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
         // パッケージNodeそれぞれについて直接依存と間接依存をキーにしてデータを保存する
         val kvs = v._1
           .map(x => {
-            if (x._2.directed.size > 0) {
-              Seq((directedKey(x._1), x._2.directed.mkString(",")), (packagesKey(x._1), x._2.packages.mkString(",")))
+            if (x._2.direct.size > 0) {
+              Seq((directedKey(x._1), x._2.all.mkString(",")), (packagesKey(x._1), x._2.all.mkString(",")))
             } else {
-              Seq((packagesKey(x._1), x._2.packages.mkString(",")))
+              Seq((packagesKey(x._1), x._2.all.mkString(",")))
             }
           })
           .flatten
@@ -49,12 +48,11 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
       })
   }
 
-  def get(id: Int): Option[PackageNode] =
+  def get(id: Int): Option[PackageCalcuratedDeps] =
     Some(
-      PackageNode(
-        id,
+      PackageCalcuratedDeps(
         redis.get[String](directedKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty),
-        scala.collection.mutable.Set(redis.get[String](packagesKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty): _*)
+        redis.get[String](packagesKey(id)).map(splitRedisData(_).toSet).getOrElse(Set.empty)
       )
     )
 

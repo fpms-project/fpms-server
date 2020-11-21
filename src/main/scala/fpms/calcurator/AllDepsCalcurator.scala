@@ -5,22 +5,47 @@ import com.typesafe.scalalogging.LazyLogging
 import LatestDependencyIdListMapGenerator.LatestDependencyIdListMap
 import AllDepsCalcurator._
 
-class AllDepsCalcurator(latestDepenencyListMap: LatestDependencyIdListMap) extends LazyLogging {
+class AllDepsCalcurator() extends LazyLogging {
+  private var status: AllDepsCalcuratorStatus = NoData
   private lazy val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.Set[Int]]
-  def calcAllDep(): PackageCalcuratedDepsMap = {
-    System.gc()
+  private var latestDepenencyListMap: LatestDependencyIdListMap = Map.empty[Int, List[Int]]
+
+  def getStatus: AllDepsCalcuratorStatus = status
+
+  def calcAllDep(latestDepenencyListMap: LatestDependencyIdListMap): Unit = {
+    this.latestDepenencyListMap = latestDepenencyListMap
+    this.status = Computing
+    allMap.clear()
     logger.info(s"start calc all deps")
     var updated = initalizeMap()
     while (updated.nonEmpty) {
       logger.info(s"updated size: ${updated.size}")
       updated = updateMapInfo(updated)
     }
-    // TODO: ここでメモリが死ぬので、いい感じにインターフェースを変える
+    this.status = Computed
+  }
+
+  def get(id: Int): Option[PackageCalcuratedDeps] = {
+    status match {
+      case Computed =>
+        Some(
+          PackageCalcuratedDeps(
+            latestDepenencyListMap.get(id).getOrElse(Seq.empty),
+            allMap.get(id).map(_.toSet).getOrElse(Set.empty)
+          )
+        )
+      case _ => None
+    }
+  }
+
+  // TODO: 多分メモリ不足で死ぬ
+  def getAll = {
     latestDepenencyListMap
-      .map(v => (v._1, PackageCalcuratedDeps(v._2, allMap.get(v._1).map(_.toList).getOrElse(Seq.empty))))
+      .map(v => (v._1, PackageCalcuratedDeps(v._2, allMap.get(v._1).map(_.toSet).getOrElse(Set.empty))))
       .toMap[Int, PackageCalcuratedDeps]
   }
 
+  // Mapに最初の
   private def initalizeMap(): Set[Int] = {
     val updated = scala.collection.mutable.TreeSet.empty[Int]
     latestDepenencyListMap.toList.map {
@@ -48,9 +73,7 @@ class AllDepsCalcurator(latestDepenencyListMap: LatestDependencyIdListMap) exten
         latestDepenencyListMap.get(id).collect {
           case value => {
             value.foreach { tid =>
-              if (checkFunction(tid)) {
-                set ++= allMap.get(tid).get
-              }
+              if (checkFunction(tid)) set ++= allMap.get(tid).get
             }
             if (set.size > oldSize) {
               updated += id
@@ -66,4 +89,9 @@ class AllDepsCalcurator(latestDepenencyListMap: LatestDependencyIdListMap) exten
 
 object AllDepsCalcurator {
   type PackageCalcuratedDepsMap = Map[Int, PackageCalcuratedDeps]
+
+  sealed abstract class AllDepsCalcuratorStatus
+  case object NoData extends AllDepsCalcuratorStatus
+  case object Computing extends AllDepsCalcuratorStatus
+  case object Computed extends AllDepsCalcuratorStatus
 }

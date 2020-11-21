@@ -38,5 +38,5 @@ case class PackageNode(
 
 case class PackageCalcuratedDeps(
     direct: Seq[Int],
-    all: Seq[Int]
+    all: Set[Int]
 )

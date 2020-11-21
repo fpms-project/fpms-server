@@ -52,7 +52,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
     Some(
       PackageCalcuratedDeps(
         redis.get[String](directedKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty),
-        Seq[Int](redis.get[String](packagesKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty): _*)
+        redis.get[String](packagesKey(id)).map(splitRedisData(_).toSet).getOrElse(Set.empty)
       )
     )
 

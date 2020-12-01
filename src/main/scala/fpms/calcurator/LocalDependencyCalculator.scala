@@ -3,7 +3,7 @@ package fpms.calcurator
 import com.typesafe.scalalogging.LazyLogging
 
 class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
-  private val allDepsCalcurator:AllDepsCalcurator =  new AllDepsCalcurator()
+  private val allDepsCalcurator:RDSCalculator =  new RDSCalculator()
 
   def initialize(): Unit = {
     setup()
@@ -20,11 +20,11 @@ class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
 
   def add(added: AddPackage): Unit = {}
 
-  // TODO: これをそもそも別classに切り分けたほうがいい
   private def setup(): Unit = {
     logger.info("start setup")
-    val idMapGenerator = new JsonLatestDependencyIdListMapGenerator()
+    val idMapGenerator = new JsonLDILMapGenerator()
     val idMap = idMapGenerator.gen
+    System.gc()
     allDepsCalcurator.calcAllDep(idMap)
   }
 }

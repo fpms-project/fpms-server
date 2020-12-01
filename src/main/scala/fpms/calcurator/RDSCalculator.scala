@@ -2,17 +2,31 @@ package fpms.calcurator
 
 import com.typesafe.scalalogging.LazyLogging
 
-import LatestDependencyIdListMapGenerator.LatestDependencyIdListMap
-import AllDepsCalcurator._
+import LDILMapGenerator.LDILMap
+import RDSCalculator._
+import fpms.LibraryPackage
 
-class AllDepsCalcurator() extends LazyLogging {
+class RDSContainer {
+
+  def saveRDS() = ???
+  def saveLatestDepIdListMap() = ???
+
+  def add(packs: Seq[LibraryPackage]): LDILMap = ??? 
+
+  def get(id: Int):  Option[PackageCalcuratedDeps] = ???
+}
+
+/**　
+  * RDS(Recursive Dependency Set) Calcurator
+  */
+class RDSCalculator extends LazyLogging {
   private var status: AllDepsCalcuratorStatus = NoData
   private lazy val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.Set[Int]]
-  private var latestDepenencyListMap: LatestDependencyIdListMap = Map.empty[Int, List[Int]]
+  private var latestDepenencyListMap: LDILMap = Map.empty[Int, List[Int]]
 
   def getStatus: AllDepsCalcuratorStatus = status
 
-  def calcAllDep(latestDepenencyListMap: LatestDependencyIdListMap): Unit = {
+  def calcAllDep(latestDepenencyListMap: LDILMap): Unit = {
     this.latestDepenencyListMap = latestDepenencyListMap
     this.status = Computing
     allMap.clear()
@@ -72,9 +86,7 @@ class AllDepsCalcurator() extends LazyLogging {
         val oldSize = set.size
         latestDepenencyListMap.get(id).collect {
           case value => {
-            value.foreach { tid =>
-              if (checkFunction(tid)) set ++= allMap.get(tid).get
-            }
+            value.foreach { tid => if (checkFunction(tid)) set ++= allMap.get(tid).get }
             if (set.size > oldSize) {
               updated += id
               allMap.update(id, set)
@@ -87,9 +99,7 @@ class AllDepsCalcurator() extends LazyLogging {
   }
 }
 
-object AllDepsCalcurator {
-  type PackageCalcuratedDepsMap = Map[Int, PackageCalcuratedDeps]
-
+object RDSCalculator {
   sealed abstract class AllDepsCalcuratorStatus
   case object NoData extends AllDepsCalcuratorStatus
   case object Computing extends AllDepsCalcuratorStatus

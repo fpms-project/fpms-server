@@ -5,21 +5,22 @@ import com.typesafe.scalalogging.LazyLogging
 import fpms.LibraryPackage
 import fpms.json.JsonLoader
 
-import LatestDependencyIdListMapGenerator._
+import LDILMapGenerator._
 
 /**
   * ID→そのパッケージが直接依存する依存パッケージ
+  * LDIL(LatestDependencyIdList)
   */
-trait LatestDependencyIdListMapGenerator {
-  def gen: LatestDependencyIdListMap
+trait LDILMapGenerator {
+  def gen: LDILMap
 }
 
 /**
   * JSONデータからPackgeNodeのMapを作る
   * TODO: JSONからしか読み込むことができないため、ファイルの追加等はできない
   */
-class JsonLatestDependencyIdListMapGenerator extends LatestDependencyIdListMapGenerator with LazyLogging {
-  def gen: LatestDependencyIdListMap = {
+class JsonLDILMapGenerator extends LDILMapGenerator with LazyLogging {
+  def gen: LDILMap = {
     val nameToPacksMap = JsonLoader.createNamePackagesMap()
     val packsGroupedByName: List[List[LibraryPackage]] = nameToPacksMap.values.toList.map(_.toList)
     val finder = new LatestDependencyFinder(nameToPacksMap.get)
@@ -43,6 +44,6 @@ class JsonLatestDependencyIdListMapGenerator extends LatestDependencyIdListMapGe
   }
 }
 
-object LatestDependencyIdListMapGenerator {
-  type LatestDependencyIdListMap = Map[Int, List[Int]]
+object LDILMapGenerator {
+  type LDILMap = Map[Int, List[Int]]
 }

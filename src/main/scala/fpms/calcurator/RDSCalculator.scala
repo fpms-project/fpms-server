@@ -2,7 +2,7 @@ package fpms.calcurator
 
 import com.typesafe.scalalogging.LazyLogging
 
-import LDILMapGenerator.LDILMap
+import ldil.LDILMap
 import RDSCalculator._
 import fpms.LibraryPackage
 

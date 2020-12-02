@@ -52,7 +52,7 @@ object Fpms extends IOApp {
           )
         )
         val calcurator =
-          if (arg.calcurator == "memory") new LocalDependencyCalculator()
+          if (arg.calcurator == "memory") new LocalDependencyCalculator[IO]()
           else {
             val r = new RedisClient("localhost", 6379)
             new RedisDependecyCalculator(r, repo)
@@ -66,17 +66,17 @@ object Fpms extends IOApp {
             util.SqlSaver.saveJson(JsonLoader.loadIdList(), repo)
           }
           println("-> initalize data")
-          calcurator.initialize()
         }
-        println("-> start server")
-        val app = new ServerApp[IO](repo, calcurator)
-        BlazeServerBuilder[IO]
-          .bindHttp(8080, "0.0.0.0")
-          .withHttpApp(app.ServerApp())
-          .serve
-          .compile
-          .drain
-          .as(ExitCode.Success)
+        for {
+          _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
+          x <- BlazeServerBuilder[IO]
+            .bindHttp(8080, "0.0.0.0")
+            .withHttpApp(new ServerApp[IO](repo, calcurator).ServerApp())
+            .serve
+            .compile
+            .drain
+            .as(ExitCode.Success)
+        } yield x
       }
       case _ =>
         println("error: failed parse to arguments")

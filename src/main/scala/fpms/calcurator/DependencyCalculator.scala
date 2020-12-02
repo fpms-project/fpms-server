@@ -30,12 +30,6 @@ trait DependencyCalculator {
 
 case class AddPackage(name: String, version: String, deps: Map[String, String])
 
-case class PackageNode(
-    src: Int,
-    directed: Seq[Int],
-    packages: scala.collection.mutable.Set[Int]
-)
-
 case class PackageCalcuratedDeps(
     direct: Seq[Int],
     all: Set[Int]

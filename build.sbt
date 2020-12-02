@@ -31,7 +31,7 @@ run / javaOptions := Seq(
   "-verbose:gc.log",
   "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
   "-XX:+UseG1GC",
-  "-XX:MaxRAMPercentage=80",
+  "-XX:MaxRAMPercentage=75",
   "-XX:+TieredCompilation",
   "-XX:-UseCompressedOops",
   "-XX:HeapDumpPath=dump.log"

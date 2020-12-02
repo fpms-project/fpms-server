@@ -22,8 +22,7 @@ class LocalDependencyCalculator extends DependencyCalculator with LazyLogging {
 
   private def setup(): Unit = {
     logger.info("start setup")
-    val idMapGenerator = new JsonLDILMapGenerator()
-    val idMap = idMapGenerator.gen
+    val idMap =JsonLDILMapGenerator.gen
     System.gc()
     allDepsCalcurator.calcAllDep(idMap)
   }

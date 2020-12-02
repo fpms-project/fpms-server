@@ -8,18 +8,10 @@ import fpms.json.JsonLoader
 import LDILMapGenerator._
 
 /**
-  * ID→そのパッケージが直接依存する依存パッケージ
-  * LDIL(LatestDependencyIdList)
-  */
-trait LDILMapGenerator {
-  def gen: LDILMap
-}
-
-/**
   * JSONデータからPackgeNodeのMapを作る
   * TODO: JSONからしか読み込むことができないため、ファイルの追加等はできない
   */
-class JsonLDILMapGenerator extends LDILMapGenerator with LazyLogging {
+object JsonLDILMapGenerator extends LazyLogging {
   def gen: LDILMap = {
     val nameToPacksMap = JsonLoader.createNamePackagesMap()
     val packsGroupedByName: List[List[LibraryPackage]] = nameToPacksMap.values.toList.map(_.toList)

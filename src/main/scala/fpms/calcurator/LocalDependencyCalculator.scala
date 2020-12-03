@@ -1,26 +1,40 @@
 package fpms.calcurator
 
-import cats.effect.Concurrent
 import cats.implicits._
+import cats.data.OptionT
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.calcurator.ldil.LDILContainer
 import fpms.calcurator.ldil.LDILContainerOnMemory
 import fpms.calcurator.ldil.LDILMapCalculator
 import fpms.calcurator.ldil.LDILMapCalculatorOnMemory
+import fpms.calcurator.rds.RDSContainer
+import fpms.calcurator.rds.RDSContainerOnMemory
+import fpms.calcurator.rds.RDSMapCalcurator
+import fpms.calcurator.rds.RDSMapCalcuratorOnMemory
+import cats.effect.ConcurrentEffect
 
-class LocalDependencyCalculator[F[_]](implicit F: Concurrent[F]) extends DependencyCalculator[F] with LazyLogging {
-  private val allDepsCalcurator: RDSCalculator = new RDSCalculator()
+class LocalDependencyCalculator[F[_]](implicit F: ConcurrentEffect[F])
+    extends DependencyCalculator[F]
+    with LazyLogging {
   private val ldilCalcurator: LDILMapCalculator[F] = new LDILMapCalculatorOnMemory[F]()
   private val ldilContainer: LDILContainer[F] = new LDILContainerOnMemory[F]()
+  private val rdsContainer: RDSContainer[F] = new RDSContainerOnMemory[F]()
+  private val rdsMapCalculator: RDSMapCalcurator[F] = new RDSMapCalcuratorOnMemory[F]()
 
   def initialize(): F[Unit] = {
     setup()
   }
 
-  def getAll = allDepsCalcurator.getAll
+  // 一旦
+  def getAll = Map.empty[Int, PackageCalcuratedDeps]
 
-  def get(id: Int): F[Option[PackageCalcuratedDeps]] = F.pure(allDepsCalcurator.get(id))
+  def get(id: Int): F[Option[PackageCalcuratedDeps]] = {
+    (for {
+      x <- OptionT(ldilContainer.get(id))
+      v <- OptionT(rdsContainer.get(id))
+    } yield PackageCalcuratedDeps(x, v)).value
+  }
 
   /**
     * WARNING: same as initilalize
@@ -32,11 +46,11 @@ class LocalDependencyCalculator[F[_]](implicit F: Concurrent[F]) extends Depende
   private def setup(): F[Unit] = {
     logger.info("start setup")
     for {
-      _ <- ldilCalcurator.init
-      idMap <- ldilCalcurator.map
+      idMap <- ldilCalcurator.init
       _ <- F.pure(System.gc())
-      _ <- F.pure(allDepsCalcurator.calcAllDep(idMap))
+      x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
+      _ <- rdsContainer.sync(x)
     } yield ()
   }
 }

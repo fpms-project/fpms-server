@@ -1,6 +1,6 @@
 package fpms.calcurator.ldil
 
-trait LDILRepository[F[_]] {
+trait LDILContainer[F[_]] {
 
   def get(id: Int): F[Option[Seq[Int]]]
 

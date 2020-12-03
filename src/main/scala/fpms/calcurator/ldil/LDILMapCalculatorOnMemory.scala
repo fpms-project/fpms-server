@@ -5,7 +5,7 @@ import fpms.json.JsonLoader
 import com.typesafe.scalalogging.LazyLogging
 import cats.effect.Async
 
-class OnMemoryLDILMapCalculator[F[_]](implicit F: Async[F]) extends LDILMapCalculator[F] with LazyLogging {
+class LDILMapCalculatorOnMemory[F[_]](implicit F: Async[F]) extends LDILMapCalculator[F] with LazyLogging {
   private var imap: Option[LDILMap] = None
   private val packMap = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]]
   def init: F[Unit] = {

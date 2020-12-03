@@ -1,12 +1,14 @@
 package fpms.calcurator
 
 import com.typesafe.scalalogging.LazyLogging
-import fpms.calcurator.ldil.JsonMemoryLDILMapCalcurator
+import fpms.calcurator.ldil.OnMemoryLDILMapCalculator
 import cats.effect.Async
 import cats.implicits._
+import fpms.calcurator.ldil.LDILMapCalculator
 
 class LocalDependencyCalculator[F[_]](implicit F: Async[F]) extends DependencyCalculator[F] with LazyLogging {
   private val allDepsCalcurator: RDSCalculator = new RDSCalculator()
+  private val ldilCalcurator: LDILMapCalculator[F] =  new OnMemoryLDILMapCalculator[F]()
 
   def initialize(): F[Unit] = {
     setup()
@@ -25,7 +27,6 @@ class LocalDependencyCalculator[F[_]](implicit F: Async[F]) extends DependencyCa
 
   private def setup(): F[Unit] = {
     logger.info("start setup")
-    val ldilCalcurator = new JsonMemoryLDILMapCalcurator[F]()
     for {
       _ <- ldilCalcurator.init
       idMap <- ldilCalcurator.map

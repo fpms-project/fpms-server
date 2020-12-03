@@ -2,7 +2,7 @@ package fpms.calcurator.ldil
 
 import fpms.LibraryPackage
 
-trait LDILMapCalcurator[F[_]] {
+trait LDILMapCalculator[F[_]] {
   def init: F[Unit]
 
   def update(adds: Seq[LibraryPackage]): F[Unit]

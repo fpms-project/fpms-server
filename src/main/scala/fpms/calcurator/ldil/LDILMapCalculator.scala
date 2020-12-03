@@ -3,10 +3,8 @@ package fpms.calcurator.ldil
 import fpms.LibraryPackage
 
 trait LDILMapCalculator[F[_]] {
-  def init: F[Unit]
+  def init: F[LDILMap]
 
-  def update(adds: Seq[LibraryPackage]): F[Unit]
+  def update(adds: Seq[LibraryPackage]): F[LDILMap]
 
-  // TODO: ここは上手に考える
-  def map: F[LDILMap]
 }

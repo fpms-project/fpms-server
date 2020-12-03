@@ -6,21 +6,21 @@ import com.typesafe.scalalogging.LazyLogging
 import cats.effect.Async
 
 class LDILMapCalculatorOnMemory[F[_]](implicit F: Async[F]) extends LDILMapCalculator[F] with LazyLogging {
-  private var imap: Option[LDILMap] = None
-  private val packMap = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]]
-  def init: F[Unit] = {
-    packMap ++= JsonLoader.createNamePackagesMap()
-    updateMap
+  private val added = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
+  def init: F[LDILMap] = {
+    updateMap(JsonLoader.createNamePackagesMap())
   }
 
-  def update(adds: Seq[LibraryPackage]): F[Unit] = {
+  def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
+    added ++= adds
     // 追加されたパッケージについてpackMapを更新する
     // (packMapに存在していれば（すでに存在するパッケージの新しいバージョンであれば）最後に追加して更新、そうでなければ新しいキーの作成)
-    adds.foreach { v => packMap.update(v.name, packMap.get(v.name).getOrElse(Seq.empty) :+ v) }
-    updateMap
+    val packMap = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]] ++ JsonLoader.createNamePackagesMap()
+    added.foreach { v => packMap.update(v.name, packMap.get(v.name).getOrElse(Seq.empty) :+ v) }
+    updateMap(packMap.toMap)
   }
 
-  private def updateMap: F[Unit] = {
+  private def updateMap(packMap: Map[String, Seq[LibraryPackage]]): F[LDILMap] = {
     val packsGroupedByName: List[List[LibraryPackage]] = packMap.values.toList.map(_.toList)
     val finder = new LatestDependencyFinder(packMap.get)
     val map = scala.collection.mutable.Map.empty[Int, List[Int]]
@@ -39,9 +39,6 @@ class LDILMapCalculatorOnMemory[F[_]](implicit F: Async[F]) extends LDILMapCalcu
       }
     }
     logger.info(s"complete generating id list map - length: ${map.size}")
-    this.imap = Some(map.toMap)
-    F.pure(())
+    F.pure(map.toMap)
   }
-
-  def map: F[LDILMap] = F.pure(this.imap.getOrElse(Map.empty))
 }

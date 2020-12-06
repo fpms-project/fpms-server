@@ -33,7 +33,7 @@ class LocalDependencyCalculator[F[_]](implicit F: ConcurrentEffect[F])
     (for {
       x <- OptionT(ldilContainer.get(id))
       v <- OptionT(rdsContainer.get(id))
-    } yield PackageCalcuratedDeps(x, v)).value
+    } yield PackageCalcuratedDeps(x, v.toSet)).value
   }
 
   /**

@@ -66,6 +66,7 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
 
   def ServerApp(): HttpApp[F] = {
     import dsl._
+    implicit val libraryEncoder = LibraryPackage.encoder
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
     implicit val encoder = jsonEncoderOf[F, List[LibraryPackage]]
     implicit val addDecoder = deriveDecoder[AddPackage]

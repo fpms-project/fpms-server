@@ -2,6 +2,7 @@ package fpms.calcurator
 
 import cats.implicits._
 import cats.data.OptionT
+import cats.Parallel
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.calcurator.ldil.LDILContainer
@@ -14,7 +15,7 @@ import fpms.calcurator.rds.RDSMapCalcurator
 import fpms.calcurator.rds.RDSMapCalcuratorOnMemory
 import cats.effect.ConcurrentEffect
 
-class LocalDependencyCalculator[F[_]](implicit F: ConcurrentEffect[F])
+class LocalDependencyCalculator[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F])
     extends DependencyCalculator[F]
     with LazyLogging {
   private val ldilCalcurator: LDILMapCalculator[F] = new LDILMapCalculatorOnMemory[F]()

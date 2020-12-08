@@ -2,6 +2,7 @@ package fpms.calcurator.rds
 
 import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
+import cats.effect.concurrent.MVar2
 import cats.Parallel
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
@@ -24,6 +25,9 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     while (updated.nonEmpty) {
       logger.info(s"updated size: ${updated.size}")
       val updateInLoop = F.toIO(MVar.of[F, Set[Int]](Set.empty[Int])).unsafeRunSync()
+      val lock = F.toIO(MVar.of[F, Unit](())).unsafeRunSync()
+      F.toIO(lock.take).unsafeRunSync()
+      val count = F.toIO(MVar.of[F, Int](0)).unsafeRunSync()
       val checkFunction: (Int => Boolean) =
         if (updated.size / ldilMap.size > 0.5) { (_) => true }
         else updated.contains
@@ -51,20 +55,25 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
               _ <- if (x.size > set.size) {
                 for {
                   _ <- updateInLoop.take.flatMap(list => updateInLoop.put(list + id))
-                  _ <- setMvar.take.flatMap(x => setMvar.put(x))
+                  _ <- setMvar.swap(x)
                 } yield ()
               } else F.pure(())
+              x <- count.take
+              _ <- if (x + 1 >= allMap.size) lock.put(()) else F.pure(())
+              _ <- count.put(x + 1)
               _ <- semaphor.release
             } yield ())
-            .unsafeRunSync()
+            .unsafeRunAsyncAndForget()
       }
+      // lockから取れるようになるまで待つ
+      F.toIO(lock.take).unsafeRunSync()
       updated = F.toIO(updateInLoop.read).unsafeRunSync()
     }
     F.pure(allMap)
   }
 
-  private def initMap(ldilMap: LDILMap): (Map[Int, MVar[F, Set[Int]]], Set[Int]) = {
-    val allMap = scala.collection.mutable.Map.empty[Int, MVar[F, Set[Int]]]
+  private def initMap(ldilMap: LDILMap): (Map[Int, MVar2[F, Set[Int]]], Set[Int]) = {
+    val allMap = scala.collection.mutable.Map.empty[Int, MVar2[F, Set[Int]]]
     val updatedIni = scala.collection.mutable.TreeSet.empty[Int]
     ldilMap.toList.map {
       case (id, set) => {
@@ -76,5 +85,4 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     }
     (allMap.toMap, updatedIni.toSet)
   }
-
 }

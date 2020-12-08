@@ -14,6 +14,7 @@ import fpms.calcurator.LocalDependencyCalculator
 import fpms.calcurator.RedisDependecyCalculator
 import fpms.json.JsonLoader
 import fpms.repository.db.LibraryPackageSqlRepository
+import fpms.util.SqlSaver
 
 object Fpms extends IOApp {
 
@@ -61,7 +62,7 @@ object Fpms extends IOApp {
             JsonLoader.convertJson()
           }
           println("--> save data to sql(it takes more than one hour)")
-          util.SqlSaver.saveJson(JsonLoader.loadIdList().toList, repo)
+          SqlSaver.saveJson(JsonLoader.loadIdList().toList, repo)
           IO.unit.as(ExitCode.Success)
         } else {
           for {

@@ -15,12 +15,12 @@ class LibraryPackageSqlRepository[F[_]](transactor: Transactor[F])(
 
   def insert(pack: LibraryPackage): F[Unit] = {
     val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"
-    Update[PackageSqlFormat](s).toUpdate0(PackageSqlFormat.from(pack)).run.transact(transactor).as(Unit)
+    Update[PackageSqlFormat](s).toUpdate0(PackageSqlFormat.from(pack)).run.transact(transactor).as(())
   }
 
   def insert(packs: List[LibraryPackage]): F[Unit] = {
     val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"
-    Update[PackageSqlFormat](s).updateMany(packs.map(PackageSqlFormat.from)).transact(transactor).as(Unit)
+    Update[PackageSqlFormat](s).updateMany(packs.map(PackageSqlFormat.from)).transact(transactor).as(())
   }
 
   def findOne(name: String, version: String): F[Option[LibraryPackage]] =

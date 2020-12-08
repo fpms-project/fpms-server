@@ -29,7 +29,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
     F.pure(())
   }
 
-  private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) {
+  private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) = {
     // すべてのIDを保存
     redis.set(allIdSetKey, map.keySet.mkString(","))
     map
@@ -195,7 +195,8 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
     F.pure(())
   }
 
-  private def splitRedisData(str: String): Seq[Int] = str.split(",").map(_.toIntOption).flatten.toSeq
+  private def splitRedisData(str: String): Seq[Int] =
+    str.split(",").map(src => Try { Some(src.toInt) }.getOrElse(None)).flatten.toSeq
 
   private def directedKey(id: Int) = s"directed_${id}"
   private def packagesKey(id: Int) = s"packages_${id}"

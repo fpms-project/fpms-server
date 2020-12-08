@@ -9,18 +9,19 @@ Compile / run / fork := true
 lazy val root = (project in file(".")).settings(
   name := "fpms",
   version := "0.1",
-  scalaVersion := "2.12.12",
+  scalaVersion := "2.13.2",
   fork in Runtime := true,
   libraryDependencies ++= Seq(
-    "org.specs2" %% "specs2-core" % Specs2Version % "test",
-    "org.typelevel" %% "cats-core" % "2.0.0",
-    "org.typelevel" %% "cats-effect" % "2.0.0",
+    // "org.specs2" %% "specs2-core" % Specs2Version % "test",
+    "org.typelevel" %% "cats-core" % "2.3.0",
+    "org.typelevel" %% "cats-effect" % "2.3.0",
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
     "com.typesafe" % "config" % "1.4.0",
     "net.debasishg" %% "redisclient" % "3.30",
     "com.github.scopt" %% "scopt" % "3.7.1",
     "ch.qos.logback" % "logback-classic" % LogbackVersion,
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+    "org.openjdk.jol" % "jol-core" % "0.14"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
@@ -68,10 +69,10 @@ lazy val defaultscalacOptions = Seq(
   "-language:postfixOps",
   "-language:higherKinds",
   "-feature",
-  "-Ypartial-unification",
   "-Xfatal-warnings",
   "log4j2.debug",
-  "-Ywarn-unused"
+  "-Ywarn-unused",
+  "-Wconf:cat=unused:ws,any:e"
 )
 
 assemblyMergeStrategy in assembly := {

@@ -46,7 +46,7 @@ object JsonLoader extends LazyLogging {
     lists.flatten.flatten[RootInterfaceN].toArray
   }
 
-  def convertJson(start: Int = 0, end: Int = MAX_FILE_COUNT) {
+  def convertJson(start: Int = 0, end: Int = MAX_FILE_COUNT) = {
     logger.info("convert to json")
     var id = 0;
     for (i <- start to end) {
@@ -78,7 +78,7 @@ object JsonLoader extends LazyLogging {
           val info = LibraryPackage(pack.name, d.version, d.dep, d.id)
           seq += info
         } catch {
-          case _: Throwable => Unit
+          case _: Throwable => ()
         }
       }
       packs_map += (pack.name -> seq.toSeq)

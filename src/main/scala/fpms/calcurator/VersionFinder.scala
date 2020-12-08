@@ -12,9 +12,9 @@ object VersionFinder {
       Try {
         val range = Range(condition)
         var x: Option[LibraryPackage] = None
-        for (i <- 0 to seq.length - 1) {
-          if (range.valid(seq(i).version) && x.forall(v => seq(i).version > v.version)) {
-            x = Some(seq(i))
+        seq.foreach { v =>
+          if (range.valid(v.version) && x.forall(z => v.version > z.version)) {
+            x = Some(v)
           }
         }
         x

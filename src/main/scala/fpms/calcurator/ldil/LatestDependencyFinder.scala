@@ -1,9 +1,10 @@
-package fpms.calcurator
+package fpms.calcurator.ldil
 
 import fpms.LibraryPackage
 
 class LatestDependencyFinder(findFunc: (String) => Option[Seq[LibraryPackage]]) {
-  import VersionFinder._
+  import fpms.calcurator.VersionFinder._
+
   private val depCache = scala.collection.mutable.Map.empty[(String, String), Int]
 
   // パッケージの依存関係指定から、現在のIDの集合を取得する

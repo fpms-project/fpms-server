@@ -16,14 +16,15 @@ import fpms.repository.LibraryPackageRepository
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
     implicit F: ConcurrentEffect[F]
-) extends DependencyCalculator
+) extends DependencyCalculator[F]
     with LazyLogging {
 
-  def initialize(): Unit = {
+  def initialize(): F[Unit] = {
     redis.flushall
     val x = new LocalDependencyCalculator
     x.initialize()
     saveInitializeList(x.getAll)
+    F.pure(())
   }
 
   private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) {
@@ -48,17 +49,19 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
       })
   }
 
-  def get(id: Int): Option[PackageCalcuratedDeps] =
-    Some(
-      PackageCalcuratedDeps(
-        redis.get[String](directedKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty),
-        redis.get[String](packagesKey(id)).map(splitRedisData(_).toSet).getOrElse(Set.empty)
+  def get(id: Int): F[Option[PackageCalcuratedDeps]] =
+    F.pure(
+      Some(
+        PackageCalcuratedDeps(
+          redis.get[String](directedKey(id)).map(splitRedisData(_)).getOrElse(Seq.empty),
+          redis.get[String](packagesKey(id)).map(splitRedisData(_).toSet).getOrElse(Set.empty)
+        )
       )
     )
 
-  def load(): Unit = ???
+  def load(): F[Unit] = ???
 
-  def add(added: AddPackage): Unit = {
+  def add(added: AddPackage): F[Unit] = {
     // 追加リクエストのパッケージを追加
     val id = F.toIO(spRepo.getMaxId()).unsafeRunSync() + 1
     val directly = scala.collection.mutable.Set.empty[LibraryPackage]
@@ -68,7 +71,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
         case Some(value) => directly.add(value)
         case None => {
           logger.error(s"error : not found dependency ${v._1}@${v._2}")
-          return ()
+          return F.pure(())
         }
       }
     })
@@ -187,7 +190,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
       redis.mset(updatedPackDirectlyDepsMap.map(v => (directedKey(v._1), v._2.mkString(","))).toSeq: _*)
       logger.info("complete save data!")
     }
-    ()
+    F.pure(())
   }
 
   private def splitRedisData(str: String): Seq[Int] = str.split(",").map(_.toIntOption).flatten.toSeq

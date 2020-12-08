@@ -1,11 +1,11 @@
 package fpms.calcurator
 
-trait DependencyCalculator {
+trait DependencyCalculator[F[_]] {
 
   /**
     * initalize data
     */
-  def initialize(): Unit
+  def initialize(): F[Unit]
 
   /**
     * get package data
@@ -13,19 +13,19 @@ trait DependencyCalculator {
     * @param id
     * @return
     */
-  def get(id: Int): Option[PackageCalcuratedDeps]
+  def get(id: Int): F[Option[PackageCalcuratedDeps]]
 
   /**
     * load data
     */
-  def load(): Unit
+  def load(): F[Unit]
 
   /**
     * add datas
     *
     * @param added
     */
-  def add(addPackage: AddPackage): Unit
+  def add(addPackage: AddPackage): F[Unit]
 }
 
 case class AddPackage(name: String, version: String, deps: Map[String, String])

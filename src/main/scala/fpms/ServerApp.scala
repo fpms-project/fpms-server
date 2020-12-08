@@ -18,7 +18,7 @@ import fpms.calcurator.DependencyCalculator
 import fpms.repository.LibraryPackageRepository
 import fpms.calcurator.PackageCalcuratedDeps
 
-class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator)(
+class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator[F])(
     implicit F: ConcurrentEffect[F]
 ) extends LazyLogging {
   object dsl extends Http4sDsl[F]
@@ -51,9 +51,14 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
       )
       // 計算結果とレスポンスの取得
       res <- EitherT.fromOptionF[F, String, PackageNodeRespose](
-        calcurator
-          .get(target.id)
-          .fold(F.pure[Option[PackageNodeRespose]](None))(v => convertToResponse(target.id, v).map(x => Some(x))),
+        for {
+          v <- calcurator.get(target.id)
+          x <- if (v.isEmpty) {
+            F.pure[Option[PackageNodeRespose]](None)
+          } else {
+            convertToResponse(target.id, v.get).map(Some(_))
+          }
+        } yield x,
         "calcuration not completed"
       )
     } yield res).value
@@ -61,6 +66,7 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
 
   def ServerApp(): HttpApp[F] = {
     import dsl._
+    implicit val libraryEncoder = LibraryPackage.encoder
     implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
     implicit val encoder = jsonEncoderOf[F, List[LibraryPackage]]
     implicit val addDecoder = deriveDecoder[AddPackage]
@@ -73,10 +79,13 @@ class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyC
             x <- Ok(list)
           } yield x
         case GET -> Root / "id" / IntVar(id) =>
-          calcurator.get(id) match {
-            case Some(value) => Ok(convertToResponse(id, value))
-            case None        => NotFound()
-          }
+          for {
+            v <- calcurator.get(id)
+            x <- v match {
+              case Some(value) => Ok(convertToResponse(id, value))
+              case None        => NotFound()
+            }
+          } yield x
         case GET -> Root / "get" / name / range =>
           getPackages(name, range).flatMap(_ match {
             case Right(v) => Ok(v)

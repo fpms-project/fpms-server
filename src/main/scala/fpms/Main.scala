@@ -20,7 +20,7 @@ object Fpms extends IOApp {
   case class ArgOptionConfig(
       mode: String = "run",
       calcurator: String = "redis",
-      prepare: Boolean = false
+      convert: Boolean = false
   )
 
   val parser = new OptionParser[ArgOptionConfig]("fmpsn") {
@@ -29,14 +29,11 @@ object Fpms extends IOApp {
       .text("using local calcurator instead of redis (always run with initalize)")
       .action((_, c) => c.copy(calcurator = "memory"))
     help("help").text("prints this usage text")
-    cmd("init")
-      .action((_, c) => c.copy(mode = "init"))
-      .text("initalize data and run server")
-      .children(
-        opt[Unit]("prepare")
-          .action((_, c) => c.copy(prepare = true))
-          .text("convert json and save package data into sql before initialize server")
-      )
+    cmd("init").action((_, c) => c.copy(mode = "init")).text("initalize data and run server")
+    cmd("prepare")
+      .action((_, c) => c.copy(mode = "prepare"))
+      .text("prepare json and sqls")
+      .children(opt[Unit]("convert").action((_, c) => c.copy(convert = true)).text("numberd json files"))
   }
 
   def run(args: List[String]): IO[ExitCode] = {
@@ -52,31 +49,33 @@ object Fpms extends IOApp {
           )
         )
         val calcurator =
-          if (arg.calcurator == "memory") new LocalDependencyCalculator()
+          if (arg.calcurator == "memory") new LocalDependencyCalculator[IO]()
           else {
             val r = new RedisClient("localhost", 6379)
             new RedisDependecyCalculator(r, repo)
           }
-        if (arg.mode == "init") {
-          if (arg.prepare) {
-            println("-> prepare data")
+        if (arg.mode == "prepare") {
+          println("-> prepare data")
+          if (arg.convert) {
             println("--> convert json")
             JsonLoader.convertJson()
-            println("--> save data to sql(it takes more than one hour)")
-            util.SqlSaver.saveJson(JsonLoader.loadIdList(), repo)
           }
-          println("-> initalize data")
-          calcurator.initialize()
+          println("--> save data to sql(it takes more than one hour)")
+          util.SqlSaver.saveJson(JsonLoader.loadIdList().toList, repo)
+          IO.unit.as(ExitCode.Success)
+        } else {
+          for {
+            _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
+            x <- BlazeServerBuilder[IO]
+              .bindHttp(8080, "0.0.0.0")
+              .withHttpApp(new ServerApp[IO](repo, calcurator).ServerApp())
+              .serve
+              .compile
+              .drain
+              .as(ExitCode.Success)
+          } yield x
         }
-        println("-> start server")
-        val app = new ServerApp[IO](repo, calcurator)
-        BlazeServerBuilder[IO]
-          .bindHttp(8080, "0.0.0.0")
-          .withHttpApp(app.ServerApp())
-          .serve
-          .compile
-          .drain
-          .as(ExitCode.Success)
+
       }
       case _ =>
         println("error: failed parse to arguments")

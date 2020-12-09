@@ -1,15 +1,16 @@
 package fpms.calcurator.rds
 
+import scala.concurrent.ExecutionContext
+
+import cats.Parallel
 import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
 import cats.effect.concurrent.MVar2
-import cats.Parallel
+import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.calcurator.ldil.LDILMap
-import cats.effect.ConcurrentEffect
-import cats.effect.concurrent.Semaphore
 
 class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F])
     extends RDSMapCalcurator[F]
@@ -21,7 +22,7 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     val allMapList = allMap.toList
     var updated = initedMap._2
     // Loop
-    val semaphor = F.toIO(Semaphore.apply(16)).unsafeRunSync()
+    val semaphor = F.toIO(Semaphore.apply(32)).unsafeRunSync()
     while (updated.nonEmpty) {
       logger.info(s"updated size: ${updated.size}")
       val updateInLoop = F.toIO(MVar.of[F, Set[Int]](Set.empty[Int])).unsafeRunSync()
@@ -32,10 +33,10 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
         if (updated.size / ldilMap.size > 0.5) { (_) => true }
         else updated.contains
       // 最初からSemaphoreでやってくれるようなやつを作る必要がある
-      allMapList.map {
-        case (id, setMvar) =>
+      allMapList.foreach {
+        case (id, setMvar) => {
+          F.toIO(semaphor.acquire).unsafeRunSync()
           F.toIO(for {
-              _ <- semaphor.acquire
               set <- setMvar.read
               newSet <- MVar.of[F, Set[Int]](set)
               _ <- {
@@ -58,12 +59,14 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
                   _ <- setMvar.swap(x)
                 } yield ()
               } else F.pure(())
-              x <- count.take
-              _ <- if (x + 1 >= allMap.size) lock.put(()) else F.pure(())
-              _ <- count.put(x + 1)
+              c <- count.take
+              _ <- F.pure(if (c % 1000000 == 0) logger.info(s"$c"))
+              _ <- if (c + 1 >= allMap.size) lock.put(()) else F.pure(())
+              _ <- count.put(c + 1)
               _ <- semaphor.release
             } yield ())
             .unsafeRunAsyncAndForget()
+        }
       }
       // lockから取れるようになるまで待つ
       F.toIO(lock.take).unsafeRunSync()

@@ -53,6 +53,7 @@ class LocalDependencyCalculator[F[_]](implicit F: ConcurrentEffect[F], P: Parall
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
       _ <- rdsContainer.sync(x)
+      _ <- F.pure(System.gc())
     } yield ()
   }
 }

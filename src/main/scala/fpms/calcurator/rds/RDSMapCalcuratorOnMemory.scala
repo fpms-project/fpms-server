@@ -21,7 +21,7 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     val allMap = initedMap._1
     val allMapList = allMap.toList.grouped(allMap.size / 15).zipWithIndex.toList
     var updated = initedMap._2
-    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(15))
+    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(16))
     logger.info(s"created initalized map - updated size: ${updated.size}")
     // Loop
     while (updated.nonEmpty) {
@@ -30,7 +30,7 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
         else updated.contains
       val list: F[List[Int]] = allMapList.map {
         case (v, i) => {
-          val f = () => {
+          F.async[Set[Int]](cb => {
             val update = scala.collection.mutable.Set.empty[Int]
             v.foreach {
               case (id, set) => {
@@ -42,9 +42,8 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
               }
             }
             logger.info(s"  end thread: $i")
-            update.toSet
-          }
-          F.async[Set[Int]](cb => cb(Right(f())))
+            cb(Right(update.toSet))
+          })
         }
       }.toList.parSequence.map(_.flatten)
       updated = F.toIO(cs.evalOn(context)(list)).unsafeRunSync().toSet

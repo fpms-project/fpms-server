@@ -1,66 +1,54 @@
 package fpms.calcurator.rds
 
+import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel
 import cats.effect.ConcurrentEffect
-import cats.effect.concurrent.MVar
-import cats.effect.concurrent.MVar2
-import cats.effect.concurrent.Semaphore
+import cats.effect.ContextShift
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import java.util.concurrent.Executors
 
 import fpms.calcurator.ldil.LDILMap
 
-class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F])
+class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
     extends RDSMapCalcurator[F]
     with LazyLogging {
 
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     val initedMap = initMap(ldilMap)
     val allMap = initedMap._1
-    val allMapList = allMap.toList
+    val allMapList = allMap.toList.grouped(allMap.size / 15).zipWithIndex.toList
     var updated = initedMap._2
+    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(15))
+    logger.info(s"created initalized map - updated size: ${updated.size}")
     // Loop
-    val semaphor = F.toIO(Semaphore.apply(32)).unsafeRunSync()
     while (updated.nonEmpty) {
-      logger.info(s"updated size: ${updated.size}")
-      val updateInLoop = F.toIO(MVar.of[F, Set[Int]](Set.empty[Int])).unsafeRunSync()
-      val lock = F.toIO(MVar.of[F, Unit](())).unsafeRunSync()
-      F.toIO(lock.take).unsafeRunSync()
-      val count = F.toIO(MVar.of[F, Int](0)).unsafeRunSync()
       val checkFunction: (Int => Boolean) =
         if (updated.size / ldilMap.size > 0.5) { (_) => true }
         else updated.contains
-      // 最初からSemaphoreでやってくれるようなやつを作る必要がある
-      allMapList.foreach {
-        case (id, set) => {
-          F.toIO(semaphor.acquire).unsafeRunSync()
-          F.toIO({
-              val oldSize = set.size
-              ldilMap.get(id).collect { value =>
-                value.foreach { tid =>
-                  if (checkFunction(tid)) {
-                    set ++= allMap.get(tid).get
-                  }
+      val list: F[List[Int]] = allMapList.map {
+        case (v, i) => {
+          val f = () => {
+            val update = scala.collection.mutable.Set.empty[Int]
+            v.foreach {
+              case (id, set) => {
+                val oldSize = set.size;
+                ldilMap.get(id).collect { value =>
+                  value.foreach { tid => if (checkFunction(tid)) set ++= allMap.get(tid).get }
                 }
+                if (set.size > oldSize) update += id
               }
-              for {
-                _ <- if (set.size > oldSize) updateInLoop.take.flatMap(list => updateInLoop.put(list + id))
-                else F.pure(())
-                c <- count.take
-                _ <- F.pure(if (c % 1000000 == 0) logger.info(s"$c"))
-                _ <- if (c + 1 >= allMap.size) lock.put(()) else F.pure(())
-                _ <- count.put(c + 1)
-                _ <- semaphor.release
-              } yield ()
-            })
-            .unsafeRunAsyncAndForget()
+            }
+            logger.info(s"  end thread: $i")
+            update.toSet
+          }
+          F.async[Set[Int]](cb => cb(Right(f())))
         }
-      }
-      // lockから取れるようになるまで待つ
-      F.toIO(lock.take).unsafeRunSync()
-      updated = F.toIO(updateInLoop.read).unsafeRunSync()
+      }.toList.parSequence.map(_.flatten)
+      updated = F.toIO(cs.evalOn(context)(list)).unsafeRunSync().toSet
+      logger.info(s"updated size: ${updated.size}")
     }
     F.pure(allMap)
   }

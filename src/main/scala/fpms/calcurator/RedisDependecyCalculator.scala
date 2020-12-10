@@ -4,6 +4,7 @@ import scala.util.Try
 
 import cats.effect.ConcurrentEffect
 import cats.Parallel
+import cats.effect.ContextShift
 import cats.implicits._
 import com.github.sh4869.semver_parser.Range
 import com.github.sh4869.semver_parser.SemVer
@@ -17,7 +18,8 @@ import fpms.repository.LibraryPackageRepository
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
     implicit F: ConcurrentEffect[F],
-    P: Parallel[F]
+    P: Parallel[F],
+    cs: ContextShift[F]
 ) extends DependencyCalculator[F]
     with LazyLogging {
 

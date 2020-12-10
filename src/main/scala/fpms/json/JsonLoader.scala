@@ -32,7 +32,7 @@ object JsonLoader extends LazyLogging {
     lists.flatten.flatten[RootInterface].toArray
   }
 
-  def loadIdList(start: Int = 0, end: Int = MAX_FILE_COUNT): Array[RootInterfaceN] = {
+  def loadIdList(start: Int = 0, end: Int = MAX_FILE_COUNT): List[RootInterfaceN] = {
     logger.info(s"load json filenum:  ${end}")
     var lists = Seq.empty[Option[List[RootInterfaceN]]]
     for (i <- start to end) {
@@ -43,7 +43,7 @@ object JsonLoader extends LazyLogging {
       }
       lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
     }
-    lists.flatten.flatten[RootInterfaceN].toArray
+    lists.flatten.flatten[RootInterfaceN].toList
   }
 
   def convertJson(start: Int = 0, end: Int = MAX_FILE_COUNT) = {
@@ -69,8 +69,7 @@ object JsonLoader extends LazyLogging {
     val packs = loadIdList()
     logger.info("loaded json files")
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]]
-    for (i <- 0 to packs.size - 1) {
-      val pack = packs(i)
+    packs.foreach { pack =>
       val seq = scala.collection.mutable.ArrayBuffer.empty[LibraryPackage]
       for (j <- 0 to pack.versions.size - 1) {
         val d = pack.versions(j)

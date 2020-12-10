@@ -1,37 +1,53 @@
 package fpms.calcurator.rds
 
-import cats.effect.Concurrent
+import scala.concurrent.Await
+import scala.concurrent.ExecutionContext
+
+import cats.Parallel
+import cats.effect.ConcurrentEffect
+import cats.effect.ContextShift
+import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import java.util.concurrent.Executors
+
 import fpms.calcurator.ldil.LDILMap
 
-class RDSMapCalcuratorOnMemory[F[_]](implicit F: Concurrent[F]) extends RDSMapCalcurator[F] with LazyLogging {
+class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
+    extends RDSMapCalcurator[F]
+    with LazyLogging {
 
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     val initedMap = initMap(ldilMap)
     val allMap = initedMap._1
-    val allMapList = allMap.toList
+    val allMapList = allMap.toList.grouped(allMap.size / 15).zipWithIndex.toList
     var updated = initedMap._2
+    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(16))
+    logger.info(s"created initalized map - updated size: ${updated.size}")
     // Loop
     while (updated.nonEmpty) {
-      logger.info(s"updated size: ${updated.size}")
-      val updateInLoop = scala.collection.mutable.Set.empty[Int]
       val checkFunction: (Int => Boolean) =
         if (updated.size / ldilMap.size > 0.5) { (_) => true }
         else updated.contains
-      allMapList.foreach {
-        case (id, set) => {
-          val oldSize = set.size
-          ldilMap.get(id).collect {
-            case value => {
-              value.foreach { tid => if (checkFunction(tid)) set ++= allMap.get(tid).get }
-              if (set.size > oldSize) {
-                updateInLoop += id
+      val list: F[List[Int]] = allMapList.map {
+        case (v, i) => {
+          F.async[Set[Int]](cb => {
+            val update = scala.collection.mutable.Set.empty[Int]
+            v.foreach {
+              case (id, set) => {
+                val oldSize = set.size;
+                ldilMap.get(id).collect { value =>
+                  value.foreach { tid => if (checkFunction(tid)) set ++= allMap.get(tid).get }
+                }
+                if (set.size > oldSize) update += id
               }
             }
-          }
+            logger.info(s"  end thread: $i")
+            cb(Right(update.toSet))
+          })
         }
-      }
-      updated = updateInLoop.toSet
+      }.toList.parSequence.map(_.flatten)
+      updated = F.toIO(cs.evalOn(context)(list)).unsafeRunSync().toSet
+      logger.info(s"updated size: ${updated.size}")
     }
     F.pure(allMap)
   }
@@ -49,5 +65,4 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: Concurrent[F]) extends RDSMapCa
     }
     (allMap.toMap, updatedIni.toSet)
   }
-
 }

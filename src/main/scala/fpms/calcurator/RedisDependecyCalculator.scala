@@ -3,6 +3,8 @@ package fpms.calcurator
 import scala.util.Try
 
 import cats.effect.ConcurrentEffect
+import cats.Parallel
+import cats.effect.ContextShift
 import cats.implicits._
 import com.github.sh4869.semver_parser.Range
 import com.github.sh4869.semver_parser.SemVer
@@ -15,7 +17,9 @@ import fpms.calcurator.VersionFinder._
 import fpms.repository.LibraryPackageRepository
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
-    implicit F: ConcurrentEffect[F]
+    implicit F: ConcurrentEffect[F],
+    P: Parallel[F],
+    cs: ContextShift[F]
 ) extends DependencyCalculator[F]
     with LazyLogging {
 
@@ -27,7 +31,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
     F.pure(())
   }
 
-  private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) {
+  private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) = {
     // すべてのIDを保存
     redis.set(allIdSetKey, map.keySet.mkString(","))
     map
@@ -193,7 +197,8 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
     F.pure(())
   }
 
-  private def splitRedisData(str: String): Seq[Int] = str.split(",").map(_.toIntOption).flatten.toSeq
+  private def splitRedisData(str: String): Seq[Int] =
+    str.split(",").map(src => Try { Some(src.toInt) }.getOrElse(None)).flatten.toSeq
 
   private def directedKey(id: Int) = s"directed_${id}"
   private def packagesKey(id: Int) = s"packages_${id}"

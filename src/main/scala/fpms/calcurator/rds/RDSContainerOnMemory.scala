@@ -2,7 +2,6 @@ package fpms.calcurator.rds
 
 import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
-import cats.effect.concurrent.MVar2
 import cats.implicits._
 
 class RDSContainerOnMemory[F[_]](implicit F: ConcurrentEffect[F]) extends RDSContainer[F] {

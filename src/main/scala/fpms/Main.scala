@@ -3,7 +3,6 @@ package fpms
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
-import cats.implicits._
 import com.redis.RedisClient
 import com.typesafe.config._
 import doobie._

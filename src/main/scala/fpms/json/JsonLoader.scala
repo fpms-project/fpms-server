@@ -1,7 +1,5 @@
 package fpms.json
 
-import scala.io.Source
-
 import org.apache.commons.io.FileUtils
 import com.typesafe.config.ConfigFactory
 import io.circe.generic.auto._

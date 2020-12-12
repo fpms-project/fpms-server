@@ -1,6 +1,5 @@
 package fpms.calcurator.rds
 
-import scala.concurrent.Await
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel

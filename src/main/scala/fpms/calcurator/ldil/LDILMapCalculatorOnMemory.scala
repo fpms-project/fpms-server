@@ -4,8 +4,12 @@ import fpms.LibraryPackage
 import fpms.json.JsonLoader
 import com.typesafe.scalalogging.LazyLogging
 import cats.effect.Async
+import cats.Parallel
+import cats.implicits._
 
-class LDILMapCalculatorOnMemory[F[_]](implicit F: Async[F]) extends LDILMapCalculator[F] with LazyLogging {
+class LDILMapCalculatorOnMemory[F[_]](implicit F: Async[F], P: Parallel[F])
+    extends LDILMapCalculator[F]
+    with LazyLogging {
   private val added = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
   def init: F[LDILMap] = {
     updateMap(JsonLoader.createNamePackagesMap())
@@ -21,24 +25,27 @@ class LDILMapCalculatorOnMemory[F[_]](implicit F: Async[F]) extends LDILMapCalcu
   }
 
   private def updateMap(packMap: Map[String, Seq[LibraryPackage]]): F[LDILMap] = {
-    val packsGroupedByName: List[List[LibraryPackage]] = packMap.values.toList.map(_.toList)
+    val packsGroupedByName = packMap.values.toList.map(_.toList).grouped(packMap.size / 16).zipWithIndex.toList
     val finder = new LatestDependencyFinder(packMap.get)
-    val map = scala.collection.mutable.Map.empty[Int, List[Int]]
-    logger.info(s"number of names of packages : ${packsGroupedByName.size}")
-    packsGroupedByName.zipWithIndex.foreach {
-      case (v, i) => {
-        if (i % 100000 == 0) logger.info(s"count: ${i}, length: ${map.size}")
-        v.foreach { pack =>
-          try {
-            val ids = finder.findIds(pack)
-            map.update(pack.id, ids)
-          } catch {
-            case _: Throwable => ()
+    logger.info(s"number of names of packages : ${packMap.size}")
+    packsGroupedByName.map {
+      case (list, i) => {
+        F.async[Map[Int, List[Int]]](cb => {
+          val map = scala.collection.mutable.Map.empty[Int, List[Int]]
+          list.foreach { v =>
+            v.foreach { pack =>
+              try {
+                val ids = finder.findIds(pack)
+                map.update(pack.id, ids)
+              } catch {
+                case _: Throwable => ()
+              }
+            }
           }
-        }
+          logger.info(s"end $i thread")
+          cb(Right(map.toMap))
+        })
       }
-    }
-    logger.info(s"complete generating id list map - length: ${map.size}")
-    F.pure(map.toMap)
+    }.toList.parSequence.map(_.flatten.toMap)
   }
 }

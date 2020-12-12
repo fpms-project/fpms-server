@@ -72,6 +72,7 @@ lazy val defaultscalacOptions = Seq(
   "-feature",
   "-Xfatal-warnings",
   "log4j2.debug",
+  "-Ywarn-unused"
 )
 
 assemblyMergeStrategy in assembly := {

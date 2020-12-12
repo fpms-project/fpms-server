@@ -21,7 +21,8 @@ lazy val root = (project in file(".")).settings(
     "com.github.scopt" %% "scopt" % "3.7.1",
     "ch.qos.logback" % "logback-classic" % LogbackVersion,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
-    "org.openjdk.jol" % "jol-core" % "0.14"
+    "org.openjdk.jol" % "jol-core" % "0.14",
+    "commons-io" % "commons-io" % "2.8.0"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
@@ -71,8 +72,6 @@ lazy val defaultscalacOptions = Seq(
   "-feature",
   "-Xfatal-warnings",
   "log4j2.debug",
-  "-Ywarn-unused",
-  "-Wconf:cat=unused:ws,any:e"
 )
 
 assemblyMergeStrategy in assembly := {

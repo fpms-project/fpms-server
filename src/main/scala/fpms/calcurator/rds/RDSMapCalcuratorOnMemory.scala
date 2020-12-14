@@ -1,5 +1,7 @@
 package fpms.calcurator.rds
 
+import java.util.concurrent.Executors
+
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel
@@ -7,7 +9,6 @@ import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import java.util.concurrent.Executors
 
 import fpms.calcurator.ldil.LDILMap
 
@@ -18,9 +19,9 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     val initedMap = initMap(ldilMap)
     val allMap = initedMap._1
-    val allMapList = allMap.toList.grouped(allMap.size / 15).zipWithIndex.toList
+    val allMapList = allMap.toList.grouped(allMap.size / 31).zipWithIndex.toList
     var updated = initedMap._2
-    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(16))
+    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
     logger.info(s"created initalized map - updated size: ${updated.size}")
     // Loop
     while (updated.nonEmpty) {
@@ -53,7 +54,7 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
 
   private def initMap(ldilMap: LDILMap): (Map[Int, scala.collection.mutable.Set[Int]], Set[Int]) = {
     val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.Set[Int]]
-    val updatedIni = scala.collection.mutable.TreeSet.empty[Int]
+    val updatedIni = scala.collection.mutable.Set.empty[Int]
     ldilMap.toList.map {
       case (id, set) => {
         if (set.nonEmpty) {

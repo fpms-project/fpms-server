@@ -1,7 +1,8 @@
 package fpms.calcurator.ldil
+
+import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar
 import cats.implicits._
-import cats.effect.ConcurrentEffect
 
 class LDILContainerOnMemory[F[_]](implicit F: ConcurrentEffect[F]) extends LDILContainer[F] {
   private val mvar = F.toIO(MVar.of[F, Map[Int, List[Int]]](Map.empty[Int, List[Int]])).unsafeRunSync()

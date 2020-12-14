@@ -37,7 +37,7 @@ class LocalDependencyCalculator[F[_]](
   private var currentId = 0
 
   def initialize(): F[Unit] = {
-    setup().map(_ => F.toIO(loop().flatMap(_ => loop())).unsafeRunAsyncAndForget())
+    setup().map(_ => F.toIO(loop()).unsafeRunAsyncAndForget())
   }
 
   // 一旦
@@ -64,15 +64,17 @@ class LocalDependencyCalculator[F[_]](
     } yield ()
   }
 
-  private def loop() = {
+  private def loop(): F[Unit] = {
     for {
       _ <- timer.sleep(60.seconds)
       _ <- mlock.acquire
       list <- addQueue.take
-      _ <- F.pure(logger.info(s"added list : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
+      _ <- F.pure(logger.info(s"added list : ${if (list.isEmpty) "empty"
+      else list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
       _ <- addQueue.put(Seq.empty)
       _ <- if (list.nonEmpty) update(list) else F.unit
       _ <- mlock.release
+      _ <- loop()
     } yield ()
   }
 
@@ -82,7 +84,6 @@ class LocalDependencyCalculator[F[_]](
       _ <- F.pure(System.gc())
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
-      _ <- F.pure({ currentId = x.size })
       _ <- rdsContainer.sync(x)
       _ <- F.pure(System.gc())
     } yield ()

@@ -18,8 +18,8 @@ import fpms.calcurator.ldil.LDILMapCalculator
 import fpms.calcurator.ldil.LDILMapCalculatorOnMemory
 import fpms.calcurator.rds.RDSContainer
 import fpms.calcurator.rds.RDSContainerOnMemory
-import fpms.calcurator.rds.RDSMapCalcurator
-import fpms.calcurator.rds.RDSMapCalcuratorOnMemory
+import fpms.calcurator.rds.RDSMapCalculator
+import fpms.calcurator.rds.RDSMapCalculatorOnMemory
 
 class LocalDependencyCalculator[F[_]](
     implicit F: ConcurrentEffect[F],
@@ -31,7 +31,7 @@ class LocalDependencyCalculator[F[_]](
   private val ldilCalcurator: LDILMapCalculator[F] = new LDILMapCalculatorOnMemory[F]()
   private val ldilContainer: LDILContainer[F] = new LDILContainerOnMemory[F]()
   private val rdsContainer: RDSContainer[F] = new RDSContainerOnMemory[F]()
-  private val rdsMapCalculator: RDSMapCalcurator[F] = new RDSMapCalcuratorOnMemory[F]()
+  private val rdsMapCalculator: RDSMapCalculator[F] = new RDSMapCalculatorOnMemory[F]()
   private val mlock = F.toIO(MVar.of[F, Unit](()).map(new MLock(_))).unsafeRunSync()
   private val addQueue = F.toIO(MVar.of[F, Seq[LibraryPackage]](Seq.empty)).unsafeRunSync()
   private var currentId = 0

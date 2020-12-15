@@ -1,11 +1,11 @@
 package fpms.calcurator.ldil
 
 import cats.effect.ConcurrentEffect
-import cats.effect.concurrent.MVar
+import cats.effect.concurrent.MVar2
 import cats.implicits._
 
-class LDILContainerOnMemory[F[_]](implicit F: ConcurrentEffect[F]) extends LDILContainer[F] {
-  private val mvar = F.toIO(MVar.of[F, Map[Int, List[Int]]](Map.empty[Int, List[Int]])).unsafeRunSync()
+class LDILContainerOnMemory[F[_]](mvar: MVar2[F, Map[Int, List[Int]]])(implicit F: ConcurrentEffect[F])
+    extends LDILContainer[F] {
 
   def get(id: Int): F[Option[Seq[Int]]] = mvar.read.map(_.get(id))
 
@@ -13,5 +13,11 @@ class LDILContainerOnMemory[F[_]](implicit F: ConcurrentEffect[F]) extends LDILC
     for {
       _ <- mvar.tryTake
       _ <- mvar.put(map)
+    } yield ()
+
+  def update(subSet: Map[Int, List[Int]]): F[Unit] =
+    for {
+      x <- mvar.take
+      _ <- mvar.put(x ++ subSet)
     } yield ()
 }

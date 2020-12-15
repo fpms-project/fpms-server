@@ -3,14 +3,12 @@ package fpms
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
-import com.redis.RedisClient
 import com.typesafe.config._
 import doobie._
 import org.http4s.server.blaze.BlazeServerBuilder
 import scopt.OptionParser
 
 import fpms.calcurator.LocalDependencyCalculator
-import fpms.calcurator.RedisDependecyCalculator
 import fpms.json.JsonLoader
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.util.SqlSaver
@@ -48,12 +46,6 @@ object Fpms extends IOApp {
             config.getString("server.postgresql.pass")
           )
         )
-        val calcurator =
-          if (arg.calcurator == "memory") new LocalDependencyCalculator[IO]()
-          else {
-            val r = new RedisClient("localhost", 6379)
-            new RedisDependecyCalculator(r, repo)
-          }
         if (arg.mode == "prepare") {
           println("-> prepare data")
           if (arg.convert) {
@@ -65,6 +57,7 @@ object Fpms extends IOApp {
           IO.unit.as(ExitCode.Success)
         } else {
           for {
+            calcurator <- LocalDependencyCalculator.create[IO]
             _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
             x <- BlazeServerBuilder[IO]
               .bindHttp(8080, "0.0.0.0")

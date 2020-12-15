@@ -57,7 +57,7 @@ object Fpms extends IOApp {
           IO.unit.as(ExitCode.Success)
         } else {
           for {
-            calcurator <- LocalDependencyCalculator.create[IO]
+            calcurator <- LocalDependencyCalculator.create[IO](repo)
             _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
             x <- BlazeServerBuilder[IO]
               .bindHttp(8080, "0.0.0.0")

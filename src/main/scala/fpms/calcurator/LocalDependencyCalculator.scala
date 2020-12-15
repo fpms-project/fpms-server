@@ -20,18 +20,19 @@ import fpms.calcurator.rds.RDSContainer
 import fpms.calcurator.rds.RDSContainerOnMemory
 import fpms.calcurator.rds.RDSMapCalculator
 import fpms.calcurator.rds.RDSMapCalculatorOnMemory
+import fpms.repository.LibraryPackageRepository
 
 class LocalDependencyCalculator[F[_]](
+    packageRepository: LibraryPackageRepository[F],
+    ldilCalcurator: LDILMapCalculator[F],
+    ldilContainer: LDILContainer[F],
+    rdsMapCalculator: RDSMapCalculator[F],
+    rdsContainer: RDSContainer[F]
+)(
     implicit F: ConcurrentEffect[F],
-    P: Parallel[F],
-    cs: ContextShift[F],
     timer: Timer[F]
 ) extends DependencyCalculator[F]
     with LazyLogging {
-  private val ldilCalcurator: LDILMapCalculator[F] = new LDILMapCalculatorOnMemory[F]()
-  private val ldilContainer: LDILContainer[F] = new LDILContainerOnMemory[F]()
-  private val rdsContainer: RDSContainer[F] = new RDSContainerOnMemory[F]()
-  private val rdsMapCalculator: RDSMapCalculator[F] = new RDSMapCalculatorOnMemory[F]()
   private val mlock = F.toIO(MVar.of[F, Unit](()).map(new MLock(_))).unsafeRunSync()
   private val addQueue = F.toIO(MVar.of[F, Seq[LibraryPackage]](Seq.empty)).unsafeRunSync()
   private var currentId = 0
@@ -59,6 +60,7 @@ class LocalDependencyCalculator[F[_]](
     for {
       q <- addQueue.take
       x <- F.pure(LibraryPackage(added.name, added.version, Some(added.deps), currentId))
+      _ <- packageRepository.insert(x)
       _ <- F.pure(currentId += 1)
       _ <- addQueue.put(q :+ x)
     } yield ()
@@ -100,6 +102,24 @@ class LocalDependencyCalculator[F[_]](
       _ <- F.pure(System.gc())
     } yield ()
   }
+}
+
+object LocalDependencyCalculator {
+  def create[F[_]: ConcurrentEffect](packageRepository: LibraryPackageRepository[F])(
+      implicit P: Parallel[F],
+      cs: ContextShift[F],
+      timer: Timer[F]
+  ): F[LocalDependencyCalculator[F]] =
+    for {
+      m <- MVar.of[F, Map[Int, List[Int]]](Map.empty)
+      m2 <- MVar.of[F, rds.RDSMap](Map.empty)
+    } yield new LocalDependencyCalculator(
+      packageRepository,
+      new LDILMapCalculatorOnMemory[F](),
+      new LDILContainerOnMemory[F](m),
+      new RDSMapCalculatorOnMemory[F](),
+      new RDSContainerOnMemory[F](m2)
+    )
 }
 
 final class MLock[F[_]: ConcurrentEffect](mvar: MVar2[F, Unit]) {

@@ -25,9 +25,6 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     logger.info(s"created initalized map - updated size: ${updated.size}")
     // Loop
     while (updated.nonEmpty) {
-      val checkFunction: (Int => Boolean) =
-        if (updated.size / ldilMap.size > 0.5) { (_) => true }
-        else updated.contains
       val list = allMapList.map {
         case (v, i) =>
           F.async[Set[Int]](cb => {
@@ -36,7 +33,7 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
               case (id, set) => {
                 val oldSize = set.size;
                 ldilMap.get(id).collect { value =>
-                  value.foreach { tid => if (checkFunction(tid)) set ++= allMap.get(tid).get }
+                  value.foreach { tid => if (updated.contains(tid)) set ++= allMap.get(tid).getOrElse(Set.empty) }
                 }
                 if (set.size > oldSize) update += id
               }

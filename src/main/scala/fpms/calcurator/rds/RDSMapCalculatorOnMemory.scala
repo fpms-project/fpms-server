@@ -33,9 +33,7 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
               case (id, set) => {
                 val oldSize = set.size;
                 ldilMap.get(id).collect { value =>
-                  value.foreach { tid =>
-                    if (updated.contains(tid)) set ++= allMap.get(tid).getOrElse(Set.empty).toSet.&~(set.toSet)
-                  }
+                  value.foreach { tid => if (updated.contains(tid)) set ++= allMap.get(tid).getOrElse(Set.empty) }
                 }
                 if (set.size > oldSize) update += id
               }
@@ -50,13 +48,13 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     F.pure(allMap)
   }
 
-  private def initMap(ldilMap: LDILMap): (Map[Int, scala.collection.mutable.ListBuffer[Int]], Set[Int]) = {
-    val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.ListBuffer[Int]]
+  private def initMap(ldilMap: LDILMap): (Map[Int, scala.collection.mutable.Set[Int]], Set[Int]) = {
+    val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.Set[Int]]
     val updatedIni = scala.collection.mutable.Set.empty[Int]
     ldilMap.toList.map {
       case (id, set) => {
         if (set.nonEmpty) {
-          allMap.update(id, scala.collection.mutable.ListBuffer(set: _*))
+          allMap.update(id, scala.collection.mutable.Set(set: _*))
           updatedIni += id
         }
       }

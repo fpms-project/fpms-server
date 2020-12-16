@@ -6,7 +6,7 @@ import cats.implicits._
 
 class RDSContainerOnMemory[F[_]](mvar: MVar2[F, RDSMap])(implicit F: ConcurrentEffect[F]) extends RDSContainer[F] {
 
-  def get(id: Int): F[Option[scala.collection.Set[Int]]] = mvar.read.map(_.get(id).map(_.toSet))
+  def get(id: Int): F[Option[scala.collection.Set[Int]]] = mvar.read.map(_.get(id))
 
   def sync(map: RDSMap): F[Unit] =
     for {

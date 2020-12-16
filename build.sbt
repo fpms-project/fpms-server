@@ -22,7 +22,9 @@ lazy val root = (project in file(".")).settings(
     "ch.qos.logback" % "logback-classic" % LogbackVersion,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
     "org.openjdk.jol" % "jol-core" % "0.14",
-    "commons-io" % "commons-io" % "2.8.0"
+    "commons-io" % "commons-io" % "2.8.0",
+    "com.twitter" %% "util-core" % "20.12.0",
+    "dev.profunktor" %% "redis4cats-effects" % "0.11.0"
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
@@ -30,12 +32,14 @@ lazy val root = (project in file(".")).settings(
 )
 
 run / javaOptions := Seq(
+  "-client",
   "-verbose:gc.log",
   "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
   "-XX:+UseG1GC",
   "-XX:MaxRAMPercentage=75",
   "-XX:+TieredCompilation",
   "-XX:-UseCompressedOops",
+  "-XX:MaxGCPauseMillis=10000",
   "-XX:HeapDumpPath=dump.log"
 )
 

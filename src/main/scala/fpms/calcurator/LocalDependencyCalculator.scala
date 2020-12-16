@@ -21,6 +21,9 @@ import fpms.calcurator.rds.RDSContainerOnMemory
 import fpms.calcurator.rds.RDSMapCalculator
 import fpms.calcurator.rds.RDSMapCalculatorOnMemory
 import fpms.repository.LibraryPackageRepository
+import fpms.redis.RedisConf
+import fpms.calcurator.ldil.LDILContainerOnRedis
+import fpms.calcurator.rds.RDSContainerOnRedis
 
 class LocalDependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
@@ -97,8 +100,11 @@ class LocalDependencyCalculator[F[_]](
       idMap <- ldilCalcurator.init
       _ <- F.pure(System.gc())
       x <- rdsMapCalculator.calc(idMap)
+      _ <- F.pure(System.gc())
       _ <- ldilContainer.sync(idMap)
+      _ <- F.pure(logger.info("ldil sync"))
       _ <- rdsContainer.sync(x)
+      _ <- F.pure(logger.info("rds sync"))
       _ <- F.pure(System.gc())
     } yield ()
   }
@@ -119,6 +125,22 @@ object LocalDependencyCalculator {
       new LDILContainerOnMemory[F](m),
       new RDSMapCalculatorOnMemory[F](),
       new RDSContainerOnMemory[F](m2)
+    )
+
+  def createForRedisContainer[F[_]](packageRepository: LibraryPackageRepository[F], conf: RedisConf)(
+      implicit P: Parallel[F],
+      cs: ContextShift[F],
+      timer: Timer[F],
+      F: ConcurrentEffect[F]
+  ): F[LocalDependencyCalculator[F]] =
+    F.pure(
+      new LocalDependencyCalculator(
+        packageRepository,
+        new LDILMapCalculatorOnMemory[F](),
+        new LDILContainerOnRedis(conf),
+        new RDSMapCalculatorOnMemory[F](),
+        new RDSContainerOnRedis(conf)
+      )
     )
 }
 

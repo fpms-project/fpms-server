@@ -12,6 +12,7 @@ import fpms.calcurator.LocalDependencyCalculator
 import fpms.json.JsonLoader
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.util.SqlSaver
+import fpms.redis.RedisConf
 
 object Fpms extends IOApp {
 
@@ -57,7 +58,8 @@ object Fpms extends IOApp {
           IO.unit.as(ExitCode.Success)
         } else {
           for {
-            calcurator <- LocalDependencyCalculator.create[IO](repo)
+            calcurator <- LocalDependencyCalculator
+              .createForRedisContainer[IO](repo, RedisConf(config.getConfig("server.redis")))
             _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
             x <- BlazeServerBuilder[IO]
               .bindHttp(8080, "0.0.0.0")

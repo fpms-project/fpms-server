@@ -1,7 +1,6 @@
 package fpms.json
 
-import scala.io.Source
-
+import org.apache.commons.io.FileUtils
 import com.typesafe.config.ConfigFactory
 import io.circe.generic.auto._
 import io.circe.parser.decode
@@ -18,7 +17,7 @@ object JsonLoader extends LazyLogging {
   private lazy val config = ConfigFactory.load("app.conf").getConfig("json")
   lazy val MAX_FILE_COUNT = config.getInt("filenum")
 
-  def loadList(start: Int = 0, end: Int = MAX_FILE_COUNT): Array[RootInterface] = {
+  def loadList(start: Int = 0, end: Int = MAX_FILE_COUNT): List[RootInterface] = {
     var lists = Seq.empty[Option[List[RootInterface]]]
     for (i <- start to end) {
       logger.info(s"json file: ${i}/${end}")
@@ -29,21 +28,23 @@ object JsonLoader extends LazyLogging {
       }
       lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
     }
-    lists.flatten.flatten[RootInterface].toArray
+    lists.flatten.flatten[RootInterface].toList
   }
 
   def loadIdList(start: Int = 0, end: Int = MAX_FILE_COUNT): List[RootInterfaceN] = {
     logger.info(s"load json filenum:  ${end}")
-    var lists = Seq.empty[Option[List[RootInterfaceN]]]
+    val lists = scala.collection.mutable.ListBuffer.empty[RootInterfaceN]
     for (i <- start to end) {
       val src = readFile(s"${config.getString("idjsondir")}$i.json")
       val dec = decode[List[RootInterfaceN]](src) match {
         case Right(v) => Some(v)
         case Left(_)  => None
       }
-      lists = lists :+ dec.map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
+      lists ++= dec
+        .map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
+        .getOrElse(Seq.empty)
     }
-    lists.flatten.flatten[RootInterfaceN].toList
+    lists.toList
   }
 
   def convertJson(start: Int = 0, end: Int = MAX_FILE_COUNT) = {
@@ -70,9 +71,8 @@ object JsonLoader extends LazyLogging {
     logger.info("loaded json files")
     val packs_map = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]]
     packs.foreach { pack =>
-      val seq = scala.collection.mutable.ArrayBuffer.empty[LibraryPackage]
-      for (j <- 0 to pack.versions.size - 1) {
-        val d = pack.versions(j)
+      val seq = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
+      pack.versions.foreach { d =>
         try {
           val info = LibraryPackage(pack.name, d.version, d.dep, d.id)
           seq += info
@@ -101,10 +101,5 @@ object JsonLoader extends LazyLogging {
   private def filepath(count: Int): String =
     s"${config.getString("jsondir")}$count.json"
 
-  private def readFile(filename: String): String = {
-    val source = Source.fromFile(filename)
-    val result = source.getLines.mkString
-    source.close()
-    result
-  }
+  private def readFile(filename: String): String = FileUtils.readFileToString(new java.io.File(filename), "utf-8")
 }

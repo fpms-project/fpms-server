@@ -3,8 +3,6 @@ package fpms.calcurator
 import scala.util.Try
 
 import cats.effect.ConcurrentEffect
-import cats.Parallel
-import cats.effect.ContextShift
 import cats.implicits._
 import com.github.sh4869.semver_parser.Range
 import com.github.sh4869.semver_parser.SemVer
@@ -17,20 +15,13 @@ import fpms.calcurator.VersionFinder._
 import fpms.repository.LibraryPackageRepository
 
 class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageRepository[F])(
-    implicit F: ConcurrentEffect[F],
-    P: Parallel[F],
-    cs: ContextShift[F]
+    implicit F: ConcurrentEffect[F]
 ) extends DependencyCalculator[F]
     with LazyLogging {
 
-  def initialize(): F[Unit] = {
-    redis.flushall
-    val x = new LocalDependencyCalculator
-    x.initialize()
-    saveInitializeList(x.getAll)
-    F.pure(())
-  }
+  def initialize(): F[Unit] = ???
 
+  /*
   private def saveInitializeList(map: Map[Int, PackageCalcuratedDeps]) = {
     // すべてのIDを保存
     redis.set(allIdSetKey, map.keySet.mkString(","))
@@ -52,6 +43,7 @@ class RedisDependecyCalculator[F[_]](redis: RedisClient, spRepo: LibraryPackageR
         redis.mset(kvs.toSeq: _*)
       })
   }
+   */
 
   def get(id: Int): F[Option[PackageCalcuratedDeps]] =
     F.pure(

@@ -1,6 +1,7 @@
 package fpms.calcurator.rds
 
-import scala.concurrent.Await
+import java.util.concurrent.Executors
+
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel
@@ -8,45 +9,40 @@ import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import java.util.concurrent.Executors
 
 import fpms.calcurator.ldil.LDILMap
 
-class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
-    extends RDSMapCalcurator[F]
+class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
+    extends RDSMapCalculator[F]
     with LazyLogging {
 
   def calc(ldilMap: LDILMap): F[RDSMap] = {
-    val initedMap = initMap(ldilMap)
-    val allMap = initedMap._1
-    val allMapList = allMap.toList.grouped(allMap.size / 15).zipWithIndex.toList
-    var updated = initedMap._2
-    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(16))
+    logger.info("start calculation of RDS")
+    val (allMap, updatedZ) = initMap(ldilMap)
+    val allMapList = allMap.toList.grouped(allMap.size / 31).zipWithIndex.toList
+    var updated = updatedZ
+    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
     logger.info(s"created initalized map - updated size: ${updated.size}")
     // Loop
     while (updated.nonEmpty) {
-      val checkFunction: (Int => Boolean) =
-        if (updated.size / ldilMap.size > 0.5) { (_) => true }
-        else updated.contains
-      val list: F[List[Int]] = allMapList.map {
-        case (v, i) => {
+      val list = allMapList.map {
+        case (v, i) =>
           F.async[Set[Int]](cb => {
             val update = scala.collection.mutable.Set.empty[Int]
             v.foreach {
               case (id, set) => {
                 val oldSize = set.size;
                 ldilMap.get(id).collect { value =>
-                  value.foreach { tid => if (checkFunction(tid)) set ++= allMap.get(tid).get }
+                  value.foreach { tid => if (updated.contains(tid)) set ++= allMap.get(tid).getOrElse(Set.empty) }
                 }
                 if (set.size > oldSize) update += id
               }
             }
-            logger.info(s"  end thread: $i")
+            logger.info(s"end thread $i")
             cb(Right(update.toSet))
           })
-        }
-      }.toList.parSequence.map(_.flatten)
-      updated = F.toIO(cs.evalOn(context)(list)).unsafeRunSync().toSet
+      }.toList.parSequence.map(_.flatten.toSet)
+      updated = F.toIO(cs.evalOn(context)(list)).unsafeRunSync()
       logger.info(s"updated size: ${updated.size}")
     }
     F.pure(allMap)
@@ -54,7 +50,7 @@ class RDSMapCalcuratorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
 
   private def initMap(ldilMap: LDILMap): (Map[Int, scala.collection.mutable.Set[Int]], Set[Int]) = {
     val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.Set[Int]]
-    val updatedIni = scala.collection.mutable.TreeSet.empty[Int]
+    val updatedIni = scala.collection.mutable.Set.empty[Int]
     ldilMap.toList.map {
       case (id, set) => {
         if (set.nonEmpty) {

@@ -14,16 +14,16 @@ import com.typesafe.scalalogging.LazyLogging
 import fpms.LibraryPackage
 import fpms.calcurator.ldil.LDILContainer
 import fpms.calcurator.ldil.LDILContainerOnMemory
+import fpms.calcurator.ldil.LDILContainerOnRedis
 import fpms.calcurator.ldil.LDILMapCalculator
 import fpms.calcurator.ldil.LDILMapCalculatorOnMemory
 import fpms.calcurator.rds.RDSContainer
 import fpms.calcurator.rds.RDSContainerOnMemory
+import fpms.calcurator.rds.RDSContainerOnRedis
 import fpms.calcurator.rds.RDSMapCalculator
 import fpms.calcurator.rds.RDSMapCalculatorOnMemory
-import fpms.repository.LibraryPackageRepository
 import fpms.redis.RedisConf
-import fpms.calcurator.ldil.LDILContainerOnRedis
-import fpms.calcurator.rds.RDSContainerOnRedis
+import fpms.repository.LibraryPackageRepository
 
 class LocalDependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
@@ -38,7 +38,6 @@ class LocalDependencyCalculator[F[_]](
     with LazyLogging {
   private val mlock = F.toIO(MVar.of[F, Unit](()).map(new MLock(_))).unsafeRunSync()
   private val addQueue = F.toIO(MVar.of[F, Seq[LibraryPackage]](Seq.empty)).unsafeRunSync()
-  private var currentId = 0
 
   def initialize(): F[Unit] = {
     setup().map(_ => F.toIO(loop()).unsafeRunAsyncAndForget())
@@ -62,9 +61,9 @@ class LocalDependencyCalculator[F[_]](
   def add(added: AddPackage): F[Unit] = {
     for {
       q <- addQueue.take
-      x <- F.pure(LibraryPackage(added.name, added.version, Some(added.deps), currentId))
+      id <- packageRepository.getMaxId()
+      x <- F.pure(LibraryPackage(added.name, added.version, Some(added.deps), id + 1))
       _ <- packageRepository.insert(x)
-      _ <- F.pure(currentId += 1)
       _ <- addQueue.put(q :+ x)
     } yield ()
   }

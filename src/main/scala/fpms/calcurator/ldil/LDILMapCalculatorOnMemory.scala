@@ -5,13 +5,13 @@ import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel
+import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
 import fpms.json.JsonLoader
-import cats.effect.ConcurrentEffect
 
 class LDILMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
     extends LDILMapCalculator[F]

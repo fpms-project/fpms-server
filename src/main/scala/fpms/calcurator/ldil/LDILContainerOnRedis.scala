@@ -2,6 +2,7 @@ package fpms.calcurator.ldil
 
 import scala.util.Try
 
+import cats.Parallel
 import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.implicits._
@@ -10,7 +11,6 @@ import dev.profunktor.redis4cats.Redis
 import dev.profunktor.redis4cats.effect.Log
 
 import fpms.redis.RedisConf
-import cats.Parallel
 
 class LDILContainerOnRedis[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
     extends LDILContainer[F]

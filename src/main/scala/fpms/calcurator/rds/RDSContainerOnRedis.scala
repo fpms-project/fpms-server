@@ -2,6 +2,7 @@ package fpms.calcurator.rds
 
 import scala.util.Try
 
+import cats.Parallel
 import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
 import cats.implicits._
@@ -11,7 +12,7 @@ import dev.profunktor.redis4cats.effect.Log
 
 import fpms.redis.RedisConf
 
-class RDSContainerOnRedis[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F])
+class RDSContainerOnRedis[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
     extends RDSContainer[F]
     with LazyLogging {
   import LDILContainerOnRedis._
@@ -31,12 +32,24 @@ class RDSContainerOnRedis[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F]
 
   def sync(map: RDSMap): F[Unit] =
     Redis[F].utf8(s"redis://${conf.host}:${conf.port}").use { cmd =>
-      F.pure(map.grouped(10).zipWithIndex.foreach {
-        case (v, i) => {
-          if (i * 10 % 1000000 == 0) logger.info(s"${i * 10}")
-          F.toIO(cmd.mSet(v.map { case (i, v) => (s"$prefix$i", v.mkString(",")) })).unsafeRunSync()
+      map
+        .grouped(map.size / 16)
+        .zipWithIndex
+        .map {
+          case (miniMap, i) =>
+            F.async[Unit](cb => {
+              miniMap.grouped(100).foreach { v =>
+                {
+                  val set = v.map { case (i, v) => (s"$prefix$i", v.mkString(",")) }
+                  F.toIO(cmd.mSet(set)).unsafeRunSync()
+                }
+              }
+              logger.info(s"end $i")
+              cb(Right(()))
+            })
         }
-      })
+        .toList
+        .parSequence_
     }
 
   private val prefix = s"packages_"

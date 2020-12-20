@@ -4,6 +4,8 @@ val Specs2Version = "4.1.0"
 val LogbackVersion = "1.2.3"
 val DoobieVersion = "0.8.8"
 
+ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.4.4"
+
 Compile / run / fork := true
 
 lazy val root = (project in file(".")).settings(
@@ -28,11 +30,12 @@ lazy val root = (project in file(".")).settings(
   ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-  scalacOptions := defaultscalacOptions
+  scalacOptions := defaultscalacOptions,
+  semanticdbEnabled := true,
+  semanticdbVersion := scalafixSemanticdb.revision
 )
 
 run / javaOptions := Seq(
-  "-client",
   "-verbose:gc.log",
   "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
   "-XX:+UseG1GC",

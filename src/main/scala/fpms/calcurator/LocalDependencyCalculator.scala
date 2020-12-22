@@ -46,14 +46,11 @@ class LocalDependencyCalculator[F[_]](
     for {
       _ <- mlock.acquire
       idMap <- ldilCalcurator.init
-      _ <- F.pure(System.gc())
       x <- rdsMapCalculator.calc(idMap)
-      _ <- F.pure(System.gc())
       _ <- ldilContainer.sync(idMap)
       _ <- F.pure(logger.info("ldil sync"))
       _ <- rdsContainer.sync(x)
       _ <- F.pure(logger.info("rds sync"))
-      _ <- F.pure(System.gc())
       _ <- mlock.release
     } yield ()
   }
@@ -96,11 +93,9 @@ class LocalDependencyCalculator[F[_]](
   private def update(list: Seq[LibraryPackage]) = {
     for {
       idMap <- ldilCalcurator.update(list)
-      _ <- F.pure(System.gc())
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
       _ <- rdsContainer.sync(x)
-      _ <- F.pure(System.gc())
     } yield ()
   }
 }

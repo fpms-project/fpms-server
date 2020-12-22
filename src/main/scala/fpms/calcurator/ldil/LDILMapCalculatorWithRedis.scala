@@ -1,5 +1,7 @@
 package fpms.calcurator.ldil
 
+import scala.util.Try
+
 import cats.Parallel
 import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
@@ -14,6 +16,7 @@ import fpms.LibraryPackage
 import fpms.redis.RedisConf
 import fpms.redis.RedisLog
 import fpms.repository.LibraryPackageRepository
+import cats.effect.concurrent.Semaphore
 
 class LDILMapCalculatorWithRedis[F[_]](
     repo: LibraryPackageRepository[F],
@@ -36,9 +39,10 @@ class LDILMapCalculatorWithRedis[F[_]](
     val sortedAdds = adds.sortWith((a, b) => if (a.name == b.name) a.version < b.version else a.name > b.name)
     val result = for {
       empty <- mvar.isEmpty
-      map <- if (empty) createInitialMapFromRedis() else mvar.read
+      beforeMap <- if (empty) createInitialMapFromRedis() else mvar.read
+      _ <- F.pure(logger.info("get before values"))
       x <- sortedAdds
-        .map(v => createShouldUpdateList(v, map))
+        .map(v => createShouldUpdateList(v, beforeMap))
         .parSequence
         .map(
           _.reduce((a, b) =>
@@ -47,28 +51,45 @@ class LDILMapCalculatorWithRedis[F[_]](
               .toMap
           )
         )
-    } yield map.map {
+      _ <- F.pure(logger.info("all calc end"))
+    } yield beforeMap.map {
       case (key, seq) =>
         if (x.contains(key))
           key -> (seq.filter(v => !x.get(key).get.keySet.contains(v)) ++ x.get(key).get.values.toSeq).toList
         else key -> seq.toList
     }
-    result.flatMap(v => mvar.swap(v).map(_ => v))
+    for {
+      v <- result
+      _ <- mvar.tryTake
+      _ <- mvar.put(v)
+    } yield v
   }
 
   // TODO: コメントを書く
   private def createShouldUpdateList(p: LibraryPackage, idMap: Map[Int, Seq[Int]]): F[Map[Int, Map[Int, Int]]] = {
     for {
+      semaphore <- Semaphore(16)
+      _ <- F.pure(logger.info(s"create should update list: ${p.name}@${p.version.original}"))
       // p.name のパッケージに依存しそのパッケージのバージョン条件を p.version が満たすものを探す
-      ts <- repo.findByDeps(p.name).map(_.filter(_.deps.get(p.name).exists(semver_parser.Range(_).valid(p.version))))
+      ts <- repo
+        .findByDeps(p.name)
+        .map(_.filter(_.deps.get(p.name).exists(v => Try { semver_parser.Range(v).valid(p.version) }.getOrElse(false))))
+      _ <- F.pure(logger.info(s"get candide list of ${p.name}@${p.version.original} / ${ts.length}"))
       x <- ts.map { v =>
-        repo
-          .findByIds(idMap.get(v.id).get.toList)
-          .map(
-            // 同じ名前で同じバージョンのものを探し
-            _.filter(t => t.name == p.name && t.version < p.version).headOption.map(z => v.id -> Map(z.id -> p.id))
+        idMap
+          .get(v.id)
+          .fold(F.pure[Option[(Int, Map[Int, Int])]](None))(list =>
+            for {
+              _ <- semaphore.acquire
+              x <- repo.findByIds(list.toList).map {
+                // 同じ名前で同じバージョンのものを探し
+                _.filter(t => t.name == p.name && t.version < p.version).headOption.map(z => v.id -> Map(z.id -> p.id))
+              }
+              _ <- semaphore.release
+            } yield x
           )
       }.parSequence.map(_.flatten.toMap)
+      _ <- F.pure(logger.info(s"end should update list: ${p.name}@${p.version.original}"))
     } yield x
   }
 
@@ -77,7 +98,7 @@ class LDILMapCalculatorWithRedis[F[_]](
       for {
         max <- repo.getMaxId
         z <- {
-          val groupedRange = Range(0, max).grouped(max / 16).zipWithIndex
+          val groupedRange = Range(0, max).grouped(max / 8).zipWithIndex
           groupedRange.map {
             case (v, i) => {
               F.async[Map[Int, Seq[Int]]](cb => {
@@ -99,6 +120,6 @@ class LDILMapCalculatorWithRedis[F[_]](
     cmd
       .mGet(set)
       .map(_.map[Int, Seq[Int]] {
-        case (key, value) => key.split(LDIL_REDIS_PREFIX)(0).toInt -> value.splitToSeq
+        case (key, value) => key.split(LDIL_REDIS_PREFIX)(1).toInt -> value.splitToSeq
       }.toMap)
 }

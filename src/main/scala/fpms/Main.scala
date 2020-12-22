@@ -10,9 +10,9 @@ import scopt.OptionParser
 
 import fpms.calcurator.LocalDependencyCalculator
 import fpms.json.JsonLoader
+import fpms.redis.RedisConf
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.util.SqlSaver
-import fpms.redis.RedisConf
 
 object Fpms extends IOApp {
 

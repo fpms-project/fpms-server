@@ -15,8 +15,8 @@ import org.http4s.implicits._
 
 import fpms.calcurator.AddPackage
 import fpms.calcurator.DependencyCalculator
-import fpms.repository.LibraryPackageRepository
 import fpms.calcurator.PackageCalcuratedDeps
+import fpms.repository.LibraryPackageRepository
 
 class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator[F])(
     implicit F: ConcurrentEffect[F]

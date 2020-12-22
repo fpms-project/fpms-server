@@ -24,6 +24,7 @@ import fpms.calcurator.rds.RDSMapCalculator
 import fpms.calcurator.rds.RDSMapCalculatorOnMemory
 import fpms.redis.RedisConf
 import fpms.repository.LibraryPackageRepository
+import fpms.calcurator.ldil.LDILMapCalculatorWithRedis
 
 class LocalDependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
@@ -38,9 +39,20 @@ class LocalDependencyCalculator[F[_]](
     with LazyLogging {
   private val mlock = F.toIO(MVar.of[F, Unit](()).map(new MLock(_))).unsafeRunSync()
   private val addQueue = F.toIO(MVar.of[F, Seq[LibraryPackage]](Seq.empty)).unsafeRunSync()
+  F.toIO(loop()).unsafeRunAsyncAndForget()
 
   def initialize(): F[Unit] = {
-    setup().map(_ => F.toIO(loop()).unsafeRunAsyncAndForget())
+    logger.info("start setup")
+    for {
+      _ <- mlock.acquire
+      idMap <- ldilCalcurator.init
+      x <- rdsMapCalculator.calc(idMap)
+      _ <- ldilContainer.sync(idMap)
+      _ <- F.pure(logger.info("ldil sync"))
+      _ <- rdsContainer.sync(x)
+      _ <- F.pure(logger.info("rds sync"))
+      _ <- mlock.release
+    } yield ()
   }
 
   // 一旦
@@ -53,13 +65,10 @@ class LocalDependencyCalculator[F[_]](
     } yield Some(PackageCalcuratedDeps(x.getOrElse(Seq.empty[Int]), v.map(_.toSet).getOrElse(Set.empty)))
   }
 
-  /**
-    * WARNING: same as initilalize
-    */
-  def load(): F[Unit] = initialize()
-
   def add(added: AddPackage): F[Unit] = {
     for {
+      defined <- packageRepository.findOne(added.name, added.version).map(_.isDefined)
+      _ <- if (defined) F.raiseError(new Throwable("added package is already exists")) else F.pure(())
       q <- addQueue.take
       id <- packageRepository.getMaxId()
       x <- F.pure(LibraryPackage(added.name, added.version, Some(added.deps), id + 1))
@@ -73,8 +82,7 @@ class LocalDependencyCalculator[F[_]](
       _ <- timer.sleep(60.seconds)
       _ <- mlock.acquire
       list <- addQueue.take
-      _ <- F.pure(logger.info(s"added list : ${if (list.isEmpty) "empty"
-      else list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
+      _ <- F.pure(logger.info(s"added list : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
       _ <- addQueue.put(Seq.empty)
       _ <- if (list.nonEmpty) update(list) else F.unit
       _ <- mlock.release
@@ -85,26 +93,9 @@ class LocalDependencyCalculator[F[_]](
   private def update(list: Seq[LibraryPackage]) = {
     for {
       idMap <- ldilCalcurator.update(list)
-      _ <- F.pure(System.gc())
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
       _ <- rdsContainer.sync(x)
-      _ <- F.pure(System.gc())
-    } yield ()
-  }
-
-  private def setup(): F[Unit] = {
-    logger.info("start setup")
-    for {
-      idMap <- ldilCalcurator.init
-      _ <- F.pure(System.gc())
-      x <- rdsMapCalculator.calc(idMap)
-      _ <- F.pure(System.gc())
-      _ <- ldilContainer.sync(idMap)
-      _ <- F.pure(logger.info("ldil sync"))
-      _ <- rdsContainer.sync(x)
-      _ <- F.pure(logger.info("rds sync"))
-      _ <- F.pure(System.gc())
     } yield ()
   }
 }
@@ -116,7 +107,7 @@ object LocalDependencyCalculator {
       timer: Timer[F]
   ): F[LocalDependencyCalculator[F]] =
     for {
-      m <- MVar.of[F, Map[Int, List[Int]]](Map.empty)
+      m <- MVar.of[F, Map[Int, Seq[Int]]](Map.empty)
       m2 <- MVar.of[F, rds.RDSMap](Map.empty)
     } yield new LocalDependencyCalculator(
       packageRepository,
@@ -132,18 +123,18 @@ object LocalDependencyCalculator {
       timer: Timer[F],
       F: ConcurrentEffect[F]
   ): F[LocalDependencyCalculator[F]] =
-    F.pure(
-      new LocalDependencyCalculator(
-        packageRepository,
-        new LDILMapCalculatorOnMemory[F](),
-        new LDILContainerOnRedis(conf),
-        new RDSMapCalculatorOnMemory[F](),
-        new RDSContainerOnRedis(conf)
-      )
+    for {
+      m <- MVar.empty[F, Map[Int, Seq[Int]]]
+    } yield new LocalDependencyCalculator(
+      packageRepository,
+      new LDILMapCalculatorWithRedis[F](packageRepository, conf, m),
+      new LDILContainerOnRedis(conf),
+      new RDSMapCalculatorOnMemory[F](),
+      new RDSContainerOnRedis(conf)
     )
 }
 
-final class MLock[F[_]: ConcurrentEffect](mvar: MVar2[F, Unit]) {
+final private class MLock[F[_]: ConcurrentEffect](mvar: MVar2[F, Unit]) {
   def acquire: F[Unit] =
     mvar.take
 

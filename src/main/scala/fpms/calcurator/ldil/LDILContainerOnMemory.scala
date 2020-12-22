@@ -4,7 +4,7 @@ import cats.effect.ConcurrentEffect
 import cats.effect.concurrent.MVar2
 import cats.implicits._
 
-class LDILContainerOnMemory[F[_]](mvar: MVar2[F, Map[Int, List[Int]]])(implicit F: ConcurrentEffect[F])
+class LDILContainerOnMemory[F[_]](mvar: MVar2[F, Map[Int, Seq[Int]]])(implicit F: ConcurrentEffect[F])
     extends LDILContainer[F] {
 
   def get(id: Int): F[Option[Seq[Int]]] = mvar.read.map(_.get(id))

@@ -107,7 +107,7 @@ object LocalDependencyCalculator {
       timer: Timer[F]
   ): F[LocalDependencyCalculator[F]] =
     for {
-      m <- MVar.of[F, Map[Int, List[Int]]](Map.empty)
+      m <- MVar.of[F, Map[Int, Seq[Int]]](Map.empty)
       m2 <- MVar.of[F, rds.RDSMap](Map.empty)
     } yield new LocalDependencyCalculator(
       packageRepository,

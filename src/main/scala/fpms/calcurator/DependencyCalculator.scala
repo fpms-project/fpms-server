@@ -16,11 +16,6 @@ trait DependencyCalculator[F[_]] {
   def get(id: Int): F[Option[PackageCalcuratedDeps]]
 
   /**
-    * load data
-    */
-  def load(): F[Unit]
-
-  /**
     * add datas
     *
     * @param added

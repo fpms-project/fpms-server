@@ -3,42 +3,61 @@ val CirceVersion = "0.12.0"
 val Specs2Version = "4.1.0"
 val LogbackVersion = "1.2.3"
 val DoobieVersion = "0.8.8"
+val FpmsVersion = "0.1"
+val ScalaVersion = "2.13.2"
 
 ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.4.4"
 
-lazy val server = (project in file("server")).settings(
-  name := "fpms",
-  version := "0.1",
-  scalaVersion := "2.13.2",
-  fork in Runtime := true,
+lazy val common = (project in file("common")).settings(
+  name := "fpms-common",
+  version := FpmsVersion,
+  scalaVersion := ScalaVersion,
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-core" % "2.3.0",
-    "org.typelevel" %% "cats-effect" % "2.3.0",
-    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
-    "com.typesafe" % "config" % "1.4.0",
-    "com.github.scopt" %% "scopt" % "3.7.1",
-    "ch.qos.logback" % "logback-classic" % LogbackVersion,
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
-    "org.openjdk.jol" % "jol-core" % "0.14",
-    "commons-io" % "commons-io" % "2.8.0",
-    "dev.profunktor" %% "redis4cats-effects" % "0.11.0"
-  ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
-  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-  scalacOptions := defaultscalacOptions,
-  semanticdbEnabled := true,
-  semanticdbVersion := scalafixSemanticdb.revision,
-  javaOptions := Seq(
-    "-verbose:gc.log",
-    "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
-    "-XX:+UseG1GC",
-    "-XX:MaxRAMPercentage=75",
-    "-XX:+TieredCompilation",
-    "-XX:-UseCompressedOops",
-    "-XX:MaxGCPauseMillis=10000",
-    "-XX:HeapDumpPath=dump.log"
-  )
+    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3"
+  ) ++ CirceDeps
 )
+
+lazy val calcurator = (project in file("calculator")).settings(
+  name := "fmps-calcurator",
+  version := FpmsVersion,
+  scalaVersion := ScalaVersion
+)
+
+lazy val server = (project in file("server"))
+  .settings(
+    name := "fpms-server",
+    version := FpmsVersion,
+    scalaVersion := ScalaVersion,
+    fork in Runtime := true,
+    libraryDependencies ++= Seq(
+      "org.typelevel" %% "cats-core" % "2.3.0",
+      "org.typelevel" %% "cats-effect" % "2.3.0",
+      "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
+      "com.typesafe" % "config" % "1.4.0",
+      "com.github.scopt" %% "scopt" % "3.7.1",
+      "ch.qos.logback" % "logback-classic" % LogbackVersion,
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+      "org.openjdk.jol" % "jol-core" % "0.14",
+      "commons-io" % "commons-io" % "2.8.0",
+      "dev.profunktor" %% "redis4cats-effects" % "0.11.0"
+    ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
+    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
+    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
+    scalacOptions := defaultscalacOptions,
+    semanticdbEnabled := true,
+    semanticdbVersion := scalafixSemanticdb.revision,
+    javaOptions := Seq(
+      "-verbose:gc.log",
+      "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
+      "-XX:+UseG1GC",
+      "-XX:MaxRAMPercentage=75",
+      "-XX:+TieredCompilation",
+      "-XX:-UseCompressedOops",
+      "-XX:MaxGCPauseMillis=10000",
+      "-XX:HeapDumpPath=dump.log"
+    )
+  )
+  .dependsOn(common)
 
 lazy val http4sDeps = Seq(
   "org.http4s" %% "http4s-blaze-server",

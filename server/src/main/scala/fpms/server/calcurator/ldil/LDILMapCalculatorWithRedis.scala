@@ -14,7 +14,7 @@ import dev.profunktor.redis4cats.Redis
 import dev.profunktor.redis4cats.RedisCommands
 
 import fpms.LibraryPackage
-import fpms.server.redis.RedisConf
+import fpms.repository.redis.RedisConf
 import fpms.server.redis.RedisLog
 import fpms.repository.LibraryPackageRepository
 

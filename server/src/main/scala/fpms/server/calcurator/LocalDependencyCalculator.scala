@@ -2,9 +2,7 @@ package fpms.server.calcurator
 
 import scala.concurrent.duration._
 
-import cats.Parallel
 import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
 import cats.effect.Timer
 import cats.effect.concurrent.MVar
 import cats.effect.concurrent.MVar2
@@ -12,26 +10,18 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
-import fpms.server.calcurator.ldil.LDILContainer
-import fpms.server.calcurator.ldil.LDILContainerOnMemory
-import fpms.server.calcurator.ldil.LDILContainerOnRedis
-import fpms.server.calcurator.ldil.LDILMapCalculator
-import fpms.server.calcurator.ldil.LDILMapCalculatorOnMemory
-import fpms.server.calcurator.rds.RDSContainer
-import fpms.server.calcurator.rds.RDSContainerOnMemory
-import fpms.server.calcurator.rds.RDSContainerOnRedis
-import fpms.server.calcurator.rds.RDSMapCalculator
-import fpms.server.calcurator.rds.RDSMapCalculatorOnMemory
-import fpms.server.redis.RedisConf
 import fpms.repository.LibraryPackageRepository
-import fpms.server.calcurator.ldil.LDILMapCalculatorWithRedis
+import fpms.server.calcurator.ldil.LDILContainer
+import fpms.server.calcurator.ldil.LDILMapCalculator
+import fpms.server.calcurator.rds.RDSMapCalculator
+import fpms.repository.RDSRepository
 
 class LocalDependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
     ldilCalcurator: LDILMapCalculator[F],
     ldilContainer: LDILContainer[F],
     rdsMapCalculator: RDSMapCalculator[F],
-    rdsContainer: RDSContainer[F]
+    rdsContainer: RDSRepository[F]
 )(
     implicit F: ConcurrentEffect[F],
     timer: Timer[F]
@@ -49,7 +39,7 @@ class LocalDependencyCalculator[F[_]](
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
       _ <- F.pure(logger.info("ldil sync"))
-      _ <- rdsContainer.sync(x)
+      _ <- rdsContainer.insert(x)
       _ <- F.pure(logger.info("rds sync"))
       _ <- mlock.release
     } yield ()
@@ -95,44 +85,11 @@ class LocalDependencyCalculator[F[_]](
       idMap <- ldilCalcurator.update(list)
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.sync(idMap)
-      _ <- rdsContainer.sync(x)
+      _ <- rdsContainer.insert(x)
     } yield ()
   }
 }
 
-object LocalDependencyCalculator {
-  def create[F[_]: ConcurrentEffect](packageRepository: LibraryPackageRepository[F])(
-      implicit P: Parallel[F],
-      cs: ContextShift[F],
-      timer: Timer[F]
-  ): F[LocalDependencyCalculator[F]] =
-    for {
-      m <- MVar.of[F, Map[Int, Seq[Int]]](Map.empty)
-      m2 <- MVar.of[F, rds.RDSMap](Map.empty)
-    } yield new LocalDependencyCalculator(
-      packageRepository,
-      new LDILMapCalculatorOnMemory[F](),
-      new LDILContainerOnMemory[F](m),
-      new RDSMapCalculatorOnMemory[F](),
-      new RDSContainerOnMemory[F](m2)
-    )
-
-  def createForRedisContainer[F[_]](packageRepository: LibraryPackageRepository[F], conf: RedisConf)(
-      implicit P: Parallel[F],
-      cs: ContextShift[F],
-      timer: Timer[F],
-      F: ConcurrentEffect[F]
-  ): F[LocalDependencyCalculator[F]] =
-    for {
-      m <- MVar.empty[F, Map[Int, Seq[Int]]]
-    } yield new LocalDependencyCalculator(
-      packageRepository,
-      new LDILMapCalculatorWithRedis[F](packageRepository, conf, m),
-      new LDILContainerOnRedis(conf),
-      new RDSMapCalculatorOnMemory[F](),
-      new RDSContainerOnRedis(conf)
-    )
-}
 
 final private class MLock[F[_]: ConcurrentEffect](mvar: MVar2[F, Unit]) {
   def acquire: F[Unit] =

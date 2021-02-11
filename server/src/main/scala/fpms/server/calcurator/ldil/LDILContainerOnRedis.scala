@@ -7,7 +7,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import dev.profunktor.redis4cats.Redis
 
-import fpms.server.redis.RedisConf
+import fpms.repository.redis.RedisConf
 import fpms.server.redis.RedisLog
 
 class LDILContainerOnRedis[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])

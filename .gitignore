@@ -1,6 +1,11 @@
 
-# Created by https://www.gitignore.io/api/scala,sbt
-# Edit at https://www.gitignore.io/?templates=scala,sbt
+# Created by https://www.toptal.com/developers/gitignore/api/scala,sbt,metals
+# Edit at https://www.toptal.com/developers/gitignore?templates=scala,sbt,metals
+
+### Metals ###
+.metals/
+.bloop/
+project/**/metals.sbt
 
 ### SBT ###
 # Simple Build Tool
@@ -15,37 +20,17 @@ project/plugins/project/
 .history
 .cache
 .lib/
+.bsp
 
 ### Scala ###
 *.class
 *.log
 
-# End of https://www.gitignore.io/api/scala,sbt
+# End of https://www.toptal.com/developers/gitignore/api/scala,sbt,metals
 
-.idea/
-null/
 
+# project setting
 jsons/*
-!jsons/.gitkeep
-
-.metals/
-.bloop/
-!logs/gc/.gitkeep
-
+.vscode/
 logs/*
-!logs/.gitkeep
-
-.vscode
-*.rdb
-app.conf
-
-
-# Created by https://www.toptal.com/developers/gitignore/api/metals
-# Edit at https://www.toptal.com/developers/gitignore?templates=metals
-
-### Metals ###
-.metals/
-.bloop/
-metals.sbt
-
-# End of https://www.toptal.com/developers/gitignore/api/metals
+**/resources/app.conf

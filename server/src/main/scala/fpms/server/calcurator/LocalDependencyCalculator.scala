@@ -23,7 +23,7 @@ import fpms.server.calcurator.rds.RDSContainerOnRedis
 import fpms.server.calcurator.rds.RDSMapCalculator
 import fpms.server.calcurator.rds.RDSMapCalculatorOnMemory
 import fpms.server.redis.RedisConf
-import fpms.server.repository.LibraryPackageRepository
+import fpms.repository.LibraryPackageRepository
 import fpms.server.calcurator.ldil.LDILMapCalculatorWithRedis
 
 class LocalDependencyCalculator[F[_]](

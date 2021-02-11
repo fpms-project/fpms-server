@@ -1,10 +1,12 @@
+val FpmsVersion = "0.1"
+val ScalaVersion = "2.13.2"
+
 val Http4sVersion = "0.21.0"
 val CirceVersion = "0.12.0"
 val Specs2Version = "4.1.0"
 val LogbackVersion = "1.2.3"
 val DoobieVersion = "0.8.8"
-val FpmsVersion = "0.1"
-val ScalaVersion = "2.13.2"
+val CatsVersion = "2.3.0"
 
 ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.4.4"
 
@@ -13,8 +15,11 @@ lazy val common = (project in file("common")).settings(
   version := FpmsVersion,
   scalaVersion := ScalaVersion,
   libraryDependencies ++= Seq(
-    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3"
-  ) ++ CirceDeps
+    "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
+    "com.typesafe" % "config" % "1.4.0",
+    "dev.profunktor" %% "redis4cats-effects" % "0.11.0",
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  ) ++ CirceDeps ++ DoobieDeps ++ CatsDeps
 )
 
 lazy val calcurator = (project in file("calculator")).settings(
@@ -30,8 +35,6 @@ lazy val server = (project in file("server"))
     scalaVersion := ScalaVersion,
     fork in Runtime := true,
     libraryDependencies ++= Seq(
-      "org.typelevel" %% "cats-core" % "2.3.0",
-      "org.typelevel" %% "cats-effect" % "2.3.0",
       "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
       "com.typesafe" % "config" % "1.4.0",
       "com.github.scopt" %% "scopt" % "3.7.1",
@@ -40,7 +43,7 @@ lazy val server = (project in file("server"))
       "org.openjdk.jol" % "jol-core" % "0.14",
       "commons-io" % "commons-io" % "2.8.0",
       "dev.profunktor" %% "redis4cats-effects" % "0.11.0"
-    ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps,
+    ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ CatsDeps,
     addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
     addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
     scalacOptions := defaultscalacOptions,
@@ -58,6 +61,11 @@ lazy val server = (project in file("server"))
     )
   )
   .dependsOn(common)
+
+lazy val CatsDeps = Seq(
+  "org.typelevel" %% "cats-core",
+  "org.typelevel" %% "cats-effect"
+).map(_ % CatsVersion)
 
 lazy val http4sDeps = Seq(
   "org.http4s" %% "http4s-blaze-server",

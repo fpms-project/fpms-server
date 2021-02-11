@@ -1,4 +1,4 @@
-package fpms.server.repository.db
+package fpms.repository.db
 
 import com.github.sh4869.semver_parser.SemVer
 import io.circe.Json

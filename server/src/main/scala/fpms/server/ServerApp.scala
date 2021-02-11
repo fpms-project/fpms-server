@@ -17,7 +17,7 @@ import fpms.LibraryPackage
 import fpms.server.calcurator.AddPackage
 import fpms.server.calcurator.DependencyCalculator
 import fpms.server.calcurator.PackageCalcuratedDeps
-import fpms.server.repository.LibraryPackageRepository
+import fpms.repository.LibraryPackageRepository
 
 class ServerApp[F[_]](repo: LibraryPackageRepository[F], calcurator: DependencyCalculator[F])(
     implicit F: ConcurrentEffect[F]

@@ -7,7 +7,7 @@ import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
 import fpms.server.json.RootInterfaceN
-import fpms.server.repository.db.LibraryPackageSqlRepository
+import fpms.repository.db.LibraryPackageSqlRepository
 
 object SqlSaver extends LazyLogging {
   val GROUPED = 100

@@ -16,7 +16,7 @@ import dev.profunktor.redis4cats.RedisCommands
 import fpms.LibraryPackage
 import fpms.server.redis.RedisConf
 import fpms.server.redis.RedisLog
-import fpms.server.repository.LibraryPackageRepository
+import fpms.repository.LibraryPackageRepository
 
 class LDILMapCalculatorWithRedis[F[_]](
     repo: LibraryPackageRepository[F],

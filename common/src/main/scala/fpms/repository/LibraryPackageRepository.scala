@@ -1,4 +1,4 @@
-package fpms.server.repository
+package fpms.repository
 
 import fpms.LibraryPackage
 

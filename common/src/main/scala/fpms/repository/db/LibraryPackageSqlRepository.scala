@@ -1,4 +1,4 @@
-package fpms.server.repository.db
+package fpms.repository.db
 
 import cats.effect.ConcurrentEffect
 import cats.implicits._
@@ -7,7 +7,7 @@ import doobie.implicits._
 import doobie.postgres.circe.json.implicits._
 
 import fpms.LibraryPackage
-import fpms.server.repository.LibraryPackageRepository
+import fpms.repository.LibraryPackageRepository
 
 class LibraryPackageSqlRepository[F[_]](transactor: Transactor[F])(
     implicit F: ConcurrentEffect[F]

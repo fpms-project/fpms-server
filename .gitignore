@@ -30,7 +30,8 @@ project/plugins/project/
 
 
 # project setting
-jsons/*
+jsons
 .vscode/
 logs/*
 **/resources/app.conf
+.old_logs

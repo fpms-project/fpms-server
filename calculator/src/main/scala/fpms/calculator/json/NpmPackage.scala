@@ -1,4 +1,4 @@
-package fpms.server.json
+package fpms.calculator.json
 
 import io.circe.Decoder
 import io.circe.Encoder

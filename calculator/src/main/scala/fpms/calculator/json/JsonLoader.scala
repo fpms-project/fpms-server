@@ -1,4 +1,4 @@
-package fpms.server.json
+package fpms.calculator.json
 
 import java.io.PrintWriter
 import java.net.URLDecoder

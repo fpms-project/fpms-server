@@ -1,4 +1,4 @@
-package fpms.server.calcurator.rds
+package fpms.calculator.rds
 
 import java.util.concurrent.Executors
 
@@ -10,7 +10,8 @@ import cats.effect.ContextShift
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 
-import fpms.server.calcurator.ldil.LDILMap
+import fpms.LDIL.LDILMap
+import fpms.RDS.RDSMap
 
 class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
     extends RDSMapCalculator[F]

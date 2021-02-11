@@ -1,4 +1,4 @@
-package fpms.server.calcurator
+package fpms.calculator
 
 import scala.concurrent.duration._
 
@@ -13,10 +13,10 @@ import fpms.LibraryPackage
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
 import fpms.repository.LDILRepository
-import fpms.server.calcurator.ldil.LDILMapCalculator
-import fpms.server.calcurator.rds.RDSMapCalculator
+import fpms.calculator.ldil.LDILMapCalculator
+import fpms.calculator.rds.RDSMapCalculator
 
-class LocalDependencyCalculator[F[_]](
+class RedisDependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
     ldilCalcurator: LDILMapCalculator[F],
     ldilContainer: LDILRepository[F],
@@ -29,7 +29,6 @@ class LocalDependencyCalculator[F[_]](
     with LazyLogging {
   private val mlock = F.toIO(MVar.of[F, Unit](()).map(new MLock(_))).unsafeRunSync()
   private val addQueue = F.toIO(MVar.of[F, Seq[LibraryPackage]](Seq.empty)).unsafeRunSync()
-  F.toIO(loop()).unsafeRunAsyncAndForget()
 
   def initialize(): F[Unit] = {
     logger.info("start setup")
@@ -67,7 +66,7 @@ class LocalDependencyCalculator[F[_]](
     } yield ()
   }
 
-  private def loop(): F[Unit] = {
+  def loop(): F[Unit] = {
     for {
       _ <- timer.sleep(60.seconds)
       _ <- mlock.acquire
@@ -89,7 +88,6 @@ class LocalDependencyCalculator[F[_]](
     } yield ()
   }
 }
-
 
 final private class MLock[F[_]: ConcurrentEffect](mvar: MVar2[F, Unit]) {
   def acquire: F[Unit] =

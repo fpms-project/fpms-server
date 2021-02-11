@@ -10,31 +10,21 @@ import cats.effect.concurrent.Semaphore
 import cats.implicits._
 import com.github.sh4869.semver_parser
 import com.typesafe.scalalogging.LazyLogging
-import dev.profunktor.redis4cats.Redis
-import dev.profunktor.redis4cats.RedisCommands
 
 import fpms.LibraryPackage
-import fpms.repository.redis.RedisConf
-import fpms.server.redis.RedisLog
+import fpms.repository.LDILRepository
 import fpms.repository.LibraryPackageRepository
 
 class LDILMapCalculatorWithRedis[F[_]](
-    repo: LibraryPackageRepository[F],
-    conf: RedisConf,
+    packageRepo: LibraryPackageRepository[F],
+    ldilRepo: LDILRepository[F],
     mvar: MVar2[F, Map[Int, Seq[Int]]]
-)(
-    implicit F: ConcurrentEffect[F],
-    P: Parallel[F],
-    cs: ContextShift[F]
-) extends LDILMapCalculator[F]
-    with RedisLog[F]
+)(implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
+    extends LDILMapCalculator[F]
     with LazyLogging {
   import VersionFinder._
-  import fpms.server.redis.RedisDataConversion._
-  protected val X = implicitly
 
   def init: F[LDILMap] = new LDILMapCalculatorOnMemory[F].init
-
   // TODO: コメント・実装の整理
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
     val sortedAdds = adds.sortWith((a, b) => if (a.name == b.name) a.version < b.version else a.name > b.name)
@@ -70,7 +60,7 @@ class LDILMapCalculatorWithRedis[F[_]](
     try {
       p.deps.map {
         case (name, cond) =>
-          repo.findByName(name).map(_.latestInFits(cond).get.id)
+          packageRepo.findByName(name).map(_.latestInFits(cond).get.id)
       }.toSeq.parSequence.map(seq => Some(p.id -> seq))
     } catch {
       case _: Throwable => F.pure(None)
@@ -89,13 +79,13 @@ class LDILMapCalculatorWithRedis[F[_]](
     for {
       _ <- F.pure(logger.info(s"create should update list: ${p.name}@${p.version.original}"))
       // p.name のパッケージに依存しそのパッケージのバージョン条件を p.version が満たすものを探す
-      ts <- repo.findByDeps(p.name).map(v => filterAcceptableNewVersion(p, v))
+      ts <- packageRepo.findByDeps(p.name).map(v => filterAcceptableNewVersion(p, v))
       _ <- F.pure(logger.info(s"get candide list of ${p.name}@${p.version.original} / ${ts.length}"))
       x <- ts.map { v =>
         idMap.get(v.id).fold(F.pure[Option[(Int, Map[Int, Int])]](None)) { list =>
           for {
             _ <- semaphore.acquire
-            x <- repo.findByIds(list.toList).map {
+            x <- packageRepo.findByIds(list.toList).map {
               // LDILの中でpと同じ名前のパッケージを探し、そのバージョンがp.versionより古かった場合のみ更新する(headOptionにしているのはそのため)
               // flattenでNoneの場合は潰される
               _.filter(t => t.name == p.name && t.version < p.version).headOption
@@ -116,32 +106,10 @@ class LDILMapCalculatorWithRedis[F[_]](
   private def filterAcceptableNewVersion(p: LibraryPackage, list: Seq[LibraryPackage]) =
     list.filter(_.deps.get(p.name).exists(v => Try { semver_parser.Range(v).valid(p.version) }.getOrElse(false)))
 
-  private def createInitialMapFromRedis(): F[Map[Int, Seq[Int]]] = {
-    Redis[F].utf8(s"redis://${conf.host}:${conf.port}").use { cmd: RedisCommands[F, String, String] =>
-      for {
-        max <- repo.getMaxId
-        z <- {
-          val groupedRange = Range(0, max).grouped(max / 16).zipWithIndex
-          groupedRange.map {
-            case (v, i) =>
-              F.async[Map[Int, Seq[Int]]](cb => {
-                val x = v.toList
-                  .grouped(100)
-                  .map { v => F.toIO(getSeqFromRedis(cmd, v.map(x => s"$LDIL_REDIS_PREFIX$x").toSet)).unsafeRunSync() }
-                  .reduce((a, b) => a ++ b)
-                logger.info(s"end $i")
-                cb(Right(x))
-              })
-          }.toList.parSequence
-        }
-      } yield z.reduce((a, b) => a ++ b)
-    }
-  }
+  private def createInitialMapFromRedis(): F[Map[Int, Seq[Int]]] =
+    for {
+      max <- packageRepo.getMaxId()
+      z <- ldilRepo.get((0 to max).toSeq)
+    } yield z
 
-  private def getSeqFromRedis(cmd: RedisCommands[F, String, String], set: Set[String]): F[Map[Int, Seq[Int]]] =
-    cmd
-      .mGet(set)
-      .map(_.map[Int, Seq[Int]] {
-        case (key, value) => key.split(LDIL_REDIS_PREFIX)(1).toInt -> value.splitToSeq
-      }.toMap)
 }

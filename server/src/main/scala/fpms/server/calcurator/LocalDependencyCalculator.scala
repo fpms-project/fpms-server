@@ -11,15 +11,15 @@ import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
 import fpms.repository.LibraryPackageRepository
-import fpms.server.calcurator.ldil.LDILContainer
+import fpms.repository.RDSRepository
+import fpms.repository.LDILRepository
 import fpms.server.calcurator.ldil.LDILMapCalculator
 import fpms.server.calcurator.rds.RDSMapCalculator
-import fpms.repository.RDSRepository
 
 class LocalDependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
     ldilCalcurator: LDILMapCalculator[F],
-    ldilContainer: LDILContainer[F],
+    ldilContainer: LDILRepository[F],
     rdsMapCalculator: RDSMapCalculator[F],
     rdsContainer: RDSRepository[F]
 )(
@@ -37,7 +37,7 @@ class LocalDependencyCalculator[F[_]](
       _ <- mlock.acquire
       idMap <- ldilCalcurator.init
       x <- rdsMapCalculator.calc(idMap)
-      _ <- ldilContainer.sync(idMap)
+      _ <- ldilContainer.insert(idMap)
       _ <- F.pure(logger.info("ldil sync"))
       _ <- rdsContainer.insert(x)
       _ <- F.pure(logger.info("rds sync"))
@@ -84,7 +84,7 @@ class LocalDependencyCalculator[F[_]](
     for {
       idMap <- ldilCalcurator.update(list)
       x <- rdsMapCalculator.calc(idMap)
-      _ <- ldilContainer.sync(idMap)
+      _ <- ldilContainer.insert(idMap)
       _ <- rdsContainer.insert(x)
     } yield ()
   }

@@ -10,10 +10,10 @@ import org.http4s.server.blaze.BlazeServerBuilder
 import scopt.OptionParser
 
 import fpms.repository.db.LibraryPackageSqlRepository
+import fpms.repository.redis.LDILRedisRepository
+import fpms.repository.redis.RDSRedisRepository
 import fpms.repository.redis.RedisConf
-import fpms.repository.redis.RedisRDSRepository
 import fpms.server.calcurator.LocalDependencyCalculator
-import fpms.server.calcurator.ldil.LDILContainerOnRedis
 import fpms.server.calcurator.ldil.LDILMapCalculatorWithRedis
 import fpms.server.calcurator.rds.RDSMapCalculatorOnMemory
 import fpms.server.json.JsonLoader
@@ -61,10 +61,10 @@ object Fpms extends IOApp {
           val conf = RedisConf(config.getConfig("server.redis"))
           for {
             m <- MVar.empty[IO, Map[Int, Seq[Int]]]
-            lmc = new LDILMapCalculatorWithRedis[IO](repo, conf, m)
-            lc = new LDILContainerOnRedis[IO](conf)
+            lc = new LDILRedisRepository[IO](conf)
+            lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
             rmc = new RDSMapCalculatorOnMemory[IO]()
-            rc = new RedisRDSRepository[IO](conf)
+            rc = new RDSRedisRepository[IO](conf)
             calcurator = new LocalDependencyCalculator(repo, lmc, lc, rmc, rc)
             _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
             x <- BlazeServerBuilder[IO]

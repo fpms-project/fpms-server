@@ -1,21 +1,20 @@
 package fpms.repository.redis
 
-import fpms.repository.RDSRepository
-import fpms.RDS
-import fpms.repository.redis.RedisDataConversion._
-
-import com.typesafe.scalalogging.LazyLogging
+import cats.Parallel
 import cats.effect.ConcurrentEffect
 import cats.effect.ContextShift
-import cats.Parallel
 import cats.implicits._
+import com.typesafe.scalalogging.LazyLogging
 
-class RedisRDSRepository[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
+import fpms.RDS
+import fpms.repository.RDSRepository
+import fpms.repository.redis.RedisDataConversion._
+
+class RDSRedisRepository[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
     extends RDSRepository[F]
     with LazyLogging
     with RedisLog[F] {
-  protected val X = implicitly
-  private val prefix = s"packages_"
+  protected val AforLog = implicitly
 
   def get(id: Int): F[Option[Set[Int]]] =
     RedisResource.resource(conf).use { cmd => cmd.get(key(id)).map(_.map(_.splitToSet)) }
@@ -39,7 +38,8 @@ class RedisRDSRepository[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F],
     }
   }
 
-  private def key(id: Int) = s"packages_${id}"
+  private val prefix = s"packages_"
+  private def key(id: Int) = s"$prefix$id"
   private def value(rds: scala.collection.Set[Int]) = rds.mkString(",")
 
 }

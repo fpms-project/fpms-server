@@ -19,14 +19,40 @@ lazy val common = (project in file("common")).settings(
   libraryDependencies ++= Seq(
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
     "com.typesafe" % "config" % "1.4.0",
-    "dev.profunktor" %% "redis4cats-effects" % "0.11.0",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+    "ch.qos.logback" % "logback-classic" % LogbackVersion,
+    "dev.profunktor" %% "redis4cats-effects" % "0.11.0"
   ) ++ CirceDeps ++ DoobieDeps ++ CatsDeps
 )
 
-lazy val calcurator = (project in file("calculator")).settings(
-  name := "fmps-calcurator"
-)
+lazy val calculator = (project in file("calculator"))
+  .settings(
+    name := "fmps-calcurator",
+    fork := true,
+    libraryDependencies ++= Seq(
+      "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
+      "commons-io" % "commons-io" % "2.8.0",
+      "com.github.scopt" %% "scopt" % "3.7.1",
+      "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+      "ch.qos.logback" % "logback-classic" % LogbackVersion,
+      "com.typesafe" % "config" % "1.4.0"
+    ) ++ CatsDeps ++ CirceDeps,
+    semanticdbEnabled := true,
+    semanticdbVersion := scalafixSemanticdb.revision,
+    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
+    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
+    javaOptions := Seq(
+      "-verbose:gc.log",
+      "-Xlog:gc*:file=./logs/gc/gc_%t_%p.log:time,uptime,level,tags",
+      "-XX:+UseG1GC",
+      "-XX:MaxRAMPercentage=75",
+      "-XX:+TieredCompilation",
+      "-XX:-UseCompressedOops",
+      "-XX:MaxGCPauseMillis=10000",
+      "-XX:HeapDumpPath=dump.log"
+    )
+  )
+  .dependsOn(common)
 
 lazy val server = (project in file("server"))
   .settings(
@@ -39,21 +65,16 @@ lazy val server = (project in file("server"))
       "ch.qos.logback" % "logback-classic" % LogbackVersion,
       "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
       "org.openjdk.jol" % "jol-core" % "0.14",
-      "commons-io" % "commons-io" % "2.8.0",
-      "dev.profunktor" %% "redis4cats-effects" % "0.11.0"
+      "dev.profunktor" %% "redis4cats-effects" % "0.11.0",
+      "commons-io" % "commons-io" % "2.8.0"
     ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ CatsDeps,
-    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
-    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,
     javaOptions := Seq(
       "-verbose:gc.log",
       "-Xlog:gc*:file=./logs/gc/gc_%t_%p.log:time,uptime,level,tags",
-      "-XX:+UseG1GC",
-      "-XX:MaxRAMPercentage=75",
       "-XX:+TieredCompilation",
       "-XX:-UseCompressedOops",
-      "-XX:MaxGCPauseMillis=10000",
       "-XX:HeapDumpPath=dump.log"
     )
   )

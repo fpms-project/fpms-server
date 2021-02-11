@@ -1,4 +1,4 @@
-package fpms.server.calcurator.ldil
+package fpms.calculator.ldil
 
 import java.util.concurrent.Executors
 
@@ -11,7 +11,8 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
-import fpms.server.json.JsonLoader
+import fpms.LDIL.LDILMap
+import fpms.calculator.json.JsonLoader
 
 class LDILMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
     extends LDILMapCalculator[F]

@@ -1,4 +1,4 @@
-package fpms.server.calcurator
+package fpms.calculator
 
 trait DependencyCalculator[F[_]] {
 
@@ -21,6 +21,8 @@ trait DependencyCalculator[F[_]] {
     * @param added
     */
   def add(addPackage: AddPackage): F[Unit]
+
+  def loop(): F[Unit]
 }
 
 case class AddPackage(name: String, version: String, deps: Map[String, String])

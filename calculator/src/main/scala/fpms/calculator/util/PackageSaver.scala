@@ -1,4 +1,4 @@
-package fpms.server.util
+package fpms.calculator.util
 
 import scala.util.Try
 
@@ -6,10 +6,10 @@ import cats.effect.IO
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
-import fpms.server.json.RootInterfaceN
+import fpms.calculator.json.RootInterfaceN
 import fpms.repository.db.LibraryPackageSqlRepository
 
-object SqlSaver extends LazyLogging {
+object PackageSaver extends LazyLogging {
   val GROUPED = 100
   def saveJson(packages: List[RootInterfaceN], repo: LibraryPackageSqlRepository[IO]) = {
     packages.grouped(GROUPED).zipWithIndex.foreach {

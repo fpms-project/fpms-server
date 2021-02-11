@@ -1,4 +1,4 @@
-package fpms.server.calcurator.ldil
+package fpms.calculator.ldil
 
 import scala.util.Try
 
@@ -12,6 +12,7 @@ import com.github.sh4869.semver_parser
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
+import fpms.LDIL.LDILMap
 import fpms.repository.LDILRepository
 import fpms.repository.LibraryPackageRepository
 

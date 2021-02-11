@@ -17,7 +17,7 @@
     </appender>
 
     <appender name="DEBUG_FILE" class="ch.qos.logback.core.FileAppender">
-        <file>logs/debug_log_${time}.log</file>
+        <file>logs/debug/debug_log_${time}.log</file>
         <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>DEBUG</level>
             <onMatch>ACCEPT</onMatch>

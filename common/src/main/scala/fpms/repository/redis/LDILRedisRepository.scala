@@ -10,7 +10,6 @@ import fpms.LDIL.LDILMap
 import fpms.repository.LDILRepository
 
 import RedisDataConversion._
-import io.lettuce.core.protocol.RedisCommand
 
 class LDILRedisRepository[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
     extends LDILRepository[F]

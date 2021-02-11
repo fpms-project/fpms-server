@@ -1,5 +1,5 @@
-val FpmsVersion = "0.1"
-val ScalaVersion = "2.13.2"
+val FpmsVersion = "0.1.0"
+val FpmsScalaVersion = "2.13.2"
 
 val Http4sVersion = "0.21.0"
 val CirceVersion = "0.12.0"
@@ -9,31 +9,29 @@ val DoobieVersion = "0.8.8"
 val CatsVersion = "2.3.0"
 
 ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.4.4"
+ThisBuild / version := FpmsVersion
+ThisBuild / scalaVersion := FpmsScalaVersion
+ThisBuild / scalacOptions := defaultscalacOptions
+Compile / run / fork := true
 
 lazy val common = (project in file("common")).settings(
   name := "fpms-common",
-  version := FpmsVersion,
-  scalaVersion := ScalaVersion,
   libraryDependencies ++= Seq(
     "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
     "com.typesafe" % "config" % "1.4.0",
     "dev.profunktor" %% "redis4cats-effects" % "0.11.0",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2"
   ) ++ CirceDeps ++ DoobieDeps ++ CatsDeps
 )
 
 lazy val calcurator = (project in file("calculator")).settings(
-  name := "fmps-calcurator",
-  version := FpmsVersion,
-  scalaVersion := ScalaVersion
+  name := "fmps-calcurator"
 )
 
 lazy val server = (project in file("server"))
   .settings(
     name := "fpms-server",
-    version := FpmsVersion,
-    scalaVersion := ScalaVersion,
-    fork in Runtime := true,
+    fork := true,
     libraryDependencies ++= Seq(
       "com.github.sh4869" %% "semver-parser-scala" % "0.0.3",
       "com.typesafe" % "config" % "1.4.0",
@@ -46,12 +44,11 @@ lazy val server = (project in file("server"))
     ) ++ http4sDeps ++ CirceDeps ++ DoobieDeps ++ CatsDeps,
     addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
     addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-    scalacOptions := defaultscalacOptions,
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,
     javaOptions := Seq(
       "-verbose:gc.log",
-      "-Xlog:gc*:file=logs/gc/gc_%t_%p.log:time,uptime,level,tags",
+      "-Xlog:gc*:file=./logs/gc/gc_%t_%p.log:time,uptime,level,tags",
       "-XX:+UseG1GC",
       "-XX:MaxRAMPercentage=75",
       "-XX:+TieredCompilation",

@@ -9,6 +9,7 @@ import doobie._
 import scopt.OptionParser
 
 import fpms.repository.db.LibraryPackageSqlRepository
+import fpms.repository.redis.AddedPackageIdRedisQueue
 import fpms.repository.redis.LDILRedisRepository
 import fpms.repository.redis.RDSRedisRepository
 import fpms.repository.redis.RedisConf
@@ -63,8 +64,9 @@ object FpmsCalculator extends IOApp {
             lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
             rmc = new RDSMapCalculatorOnMemory[IO]()
             rc = new RDSRedisRepository[IO](conf)
-            calcurator = new RedisDependencyCalculator(repo, lmc, lc, rmc, rc)
-            
+            aq = new AddedPackageIdRedisQueue[IO](conf)
+            calcurator = new RedisDependencyCalculator(repo, lmc, lc, rmc, rc, aq)
+
             _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
             _ <- calcurator.loop()
           } yield ExitCode.Success

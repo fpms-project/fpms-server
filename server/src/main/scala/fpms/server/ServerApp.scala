@@ -13,10 +13,15 @@ import org.http4s.dsl._
 import org.http4s.implicits._
 
 import fpms.LibraryPackage
+import fpms.repository.AddedPackageIdQueue
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
 
-class ServerApp[F[_]](packageRepo: LibraryPackageRepository[F], rdsRepository: RDSRepository[F])(
+class ServerApp[F[_]](
+    packageRepo: LibraryPackageRepository[F],
+    rdsRepository: RDSRepository[F],
+    addedQueue: AddedPackageIdQueue[F]
+)(
     implicit F: ConcurrentEffect[F]
 ) extends LazyLogging {
   object dsl extends Http4sDsl[F]
@@ -26,7 +31,6 @@ class ServerApp[F[_]](packageRepo: LibraryPackageRepository[F], rdsRepository: R
       src <- packageRepo.findOne(target)
       set <- packageRepo.findByIds(allSet.toList)
     } yield PackageNodeRespose(src.get, set.toSet)
-
   def getPackages(name: String, range: String): F[Either[String, PackageNodeRespose]] = {
     logger.info(s"start get package from redis: ${name}@${range}")
     (for {
@@ -57,11 +61,24 @@ class ServerApp[F[_]](packageRepo: LibraryPackageRepository[F], rdsRepository: R
     } yield res).value
   }
 
-  def ServerApp(): HttpApp[F] = {
+  def add(pack: LibraryPackage) =
+    for {
+      defined <- packageRepo.findOne(pack.name, pack.version.original).map(_.isDefined)
+      _ <- if (defined) F.raiseError(new Throwable("added package is already exists")) else F.pure(())
+      id <- packageRepo.getMaxId().map(_ + 1)
+      _ <- packageRepo.insert(LibraryPackage(pack.name, pack.version, pack.deps, id))
+      _ <- addedQueue.push(id)
+    } yield ()
+
+  def app(): HttpApp[F] = {
     import dsl._
+    // ここどうにかならないか
     implicit val libraryEncoder = LibraryPackage.encoder
-    implicit val decoder = jsonEncoderOf[F, PackageNodeRespose]
-    implicit val encoder = jsonEncoderOf[F, List[LibraryPackage]]
+    implicit val encoder = jsonEncoderOf[F, PackageNodeRespose]
+    implicit val encoder2 = jsonEncoderOf[F, List[LibraryPackage]]
+    implicit val libraryDecoder = LibraryPackage.decoder
+    implicit val x = jsonOf[F, LibraryPackage]
+    // ここどうにかならないか
     HttpRoutes
       .of[F] {
         case GET -> Root / "get_package" / name =>
@@ -82,6 +99,11 @@ class ServerApp[F[_]](packageRepo: LibraryPackageRepository[F], rdsRepository: R
             case Right(v) => Ok(v)
             case Left(v)  => NotFound(v)
           })
+        case req @ POST -> Root / "add" =>
+          for {
+            v <- req.as[LibraryPackage]
+            x <- Ok(add(v))
+          } yield x
       }
       .orNotFound
   }

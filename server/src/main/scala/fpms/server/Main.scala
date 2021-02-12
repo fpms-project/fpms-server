@@ -10,6 +10,7 @@ import org.http4s.server.blaze.BlazeServerBuilder
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.repository.redis.RDSRedisRepository
 import fpms.repository.redis.RedisConf
+import fpms.repository.redis.AddedPackageIdRedisQueue
 
 object FpmsServer extends IOApp {
 
@@ -25,9 +26,10 @@ object FpmsServer extends IOApp {
     )
     val conf = RedisConf(config.getConfig("server.redis"))
     val rc = new RDSRedisRepository[IO](conf)
+    val aq = new AddedPackageIdRedisQueue[IO](conf)
     BlazeServerBuilder[IO]
       .bindHttp(8080, "0.0.0.0")
-      .withHttpApp(new ServerApp[IO](repo, rc).ServerApp())
+      .withHttpApp(new ServerApp[IO](repo, rc, aq).app())
       .serve
       .compile
       .drain

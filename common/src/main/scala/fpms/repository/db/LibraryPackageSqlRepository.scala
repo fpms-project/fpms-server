@@ -8,10 +8,19 @@ import doobie.postgres.circe.json.implicits._
 
 import fpms.LibraryPackage
 import fpms.repository.LibraryPackageRepository
+import cats.effect.ContextShift
 
-class LibraryPackageSqlRepository[F[_]](transactor: Transactor[F])(
-    implicit F: ConcurrentEffect[F]
+class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(
+    implicit F: ConcurrentEffect[F],
+    cs: ContextShift[F]
 ) extends LibraryPackageRepository[F] {
+
+  lazy private val transactor = Transactor.fromDriverManager[F](
+    "org.postgresql.Driver",
+    conf.url,
+    conf.username,
+    conf.password
+  )
 
   def insert(pack: LibraryPackage): F[Unit] = {
     val s = "insert into package (name, version, deps, id) values (?, ?, ?, ?)"

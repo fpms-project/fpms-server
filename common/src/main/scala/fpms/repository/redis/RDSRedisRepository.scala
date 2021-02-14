@@ -10,7 +10,7 @@ import fpms.RDS
 import fpms.repository.RDSRepository
 import fpms.repository.redis.RedisDataConversion._
 
-class RDSRedisRepository[F[_]](conf: RedisConf)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
+class RDSRedisRepository[F[_]](conf: RedisConfig)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
     extends RDSRepository[F]
     with LazyLogging
     with RedisLog[F] {

@@ -10,7 +10,7 @@ import dev.profunktor.redis4cats.transactions.RedisTransaction
 
 import fpms.repository.AddedPackageIdQueue
 
-class AddedPackageIdRedisQueue[F[_]](conf: RedisConf)(
+class AddedPackageIdRedisQueue[F[_]](conf: RedisConfig)(
     implicit F: ConcurrentEffect[F],
     cs: ContextShift[F],
     timer: Timer[F]

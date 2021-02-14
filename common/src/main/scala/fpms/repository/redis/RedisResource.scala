@@ -9,7 +9,7 @@ import dev.profunktor.redis4cats.RedisCommands
 
 object RedisResource {
   def resource[F[_]: Concurrent](
-      conf: RedisConf
+      conf: RedisConfig
   )(implicit cs: ContextShift[F], log: Log[F]): Resource[F, RedisCommands[F, String, String]] =
     Redis[F].utf8(s"redis://${conf.host}:${conf.port}")
 }

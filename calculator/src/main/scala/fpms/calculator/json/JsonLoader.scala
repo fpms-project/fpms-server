@@ -39,7 +39,10 @@ object JsonLoader extends LazyLogging {
       val src = readFile(s"${config.getString("idjsondir")}$i.json")
       val dec = decode[List[RootInterfaceN]](src) match {
         case Right(v) => Some(v)
-        case Left(_)  => None
+        case Left(e) => {
+          logger.error(s"failed to load file of $i.json", e)
+          None
+        }
       }
       lists ++= dec
         .map(x => x.map(v => v.copy(name = URLDecoder.decode(v.name, StandardCharsets.UTF_8.name))))
@@ -57,7 +60,7 @@ object JsonLoader extends LazyLogging {
         case Right(v) => {
           val x = convertList(v, id)
           id = x._2
-          new PrintWriter(s"jsons/id/${i}.json") {
+          new PrintWriter(s"${config.getString("idjsondir")}${i}.json") {
             write(x._1.asJson.toString())
             close()
           }
@@ -78,7 +81,9 @@ object JsonLoader extends LazyLogging {
           val info = LibraryPackage(pack.name, d.version, d.dep, d.id)
           seq += info
         } catch {
-          case _: Throwable => ()
+          case _: Throwable => {
+            logger.info(s"error parsing version: ${pack.name}, ${d.version}")
+          }
         }
       }
       packs_map += (pack.name -> seq.toSeq)

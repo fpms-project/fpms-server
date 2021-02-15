@@ -5,14 +5,14 @@ import cats.effect.IO
 import cats.effect.IOApp
 import cats.effect.concurrent.MVar
 import com.typesafe.config._
-import doobie._
 import scopt.OptionParser
 
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.repository.redis.AddedPackageIdRedisQueue
 import fpms.repository.redis.LDILRedisRepository
 import fpms.repository.redis.RDSRedisRepository
-import fpms.repository.redis.RedisConf
+import fpms.repository.redis.RedisConfig
+import fpms.repository.db.PostgresConfig
 
 import fpms.calculator.json.JsonLoader
 import fpms.calculator.ldil.LDILMapCalculatorWithRedis
@@ -40,12 +40,7 @@ object FpmsCalculator extends IOApp {
       case Some(arg) => {
         val config = ConfigFactory.load("app.conf")
         val repo = new LibraryPackageSqlRepository[IO](
-          Transactor.fromDriverManager[IO](
-            config.getString("server.postgresql.driver"),
-            config.getString("server.postgresql.url"),
-            config.getString("server.postgresql.user"),
-            config.getString("server.postgresql.pass")
-          )
+          PostgresConfig(config.getConfig("server.postgresql"))
         )
         if (arg.mode == "prepare") {
           println("-> prepare data")
@@ -57,7 +52,7 @@ object FpmsCalculator extends IOApp {
           PackageSaver.saveJson(JsonLoader.loadIdList().toList, repo)
           IO.unit.as(ExitCode.Success)
         } else {
-          val conf = RedisConf(config.getConfig("server.redis"))
+          val conf = RedisConfig(config.getConfig("server.redis"))
           for {
             m <- MVar.empty[IO, Map[Int, Seq[Int]]]
             lc = new LDILRedisRepository[IO](conf)

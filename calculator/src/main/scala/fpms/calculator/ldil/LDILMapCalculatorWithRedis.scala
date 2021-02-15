@@ -61,7 +61,7 @@ class LDILMapCalculatorWithRedis[F[_]](
     try {
       p.deps.map {
         case (name, cond) =>
-          packageRepo.findByName(name).map(_.latestInFits(cond).get.id)
+          packageRepo.findByName(name).map(_.latestInFits(cond).toOption.get.id)
       }.toSeq.parSequence.map(seq => Some(p.id -> seq))
     } catch {
       case _: Throwable => F.pure(None)

@@ -12,6 +12,7 @@ import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LDIL.LDILMap
 import fpms.RDS.RDSMap
+import fpms.RDS
 
 class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
     extends RDSMapCalculator[F]
@@ -20,46 +21,53 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     logger.info("start calculation of RDS")
     val (allMap, updatedZ) = initMap(ldilMap)
-    val allMapList = allMap.toList.grouped(allMap.size / 31).zipWithIndex.toList
-    var updated = updatedZ
+    val keyGrouped = allMap.keySet.grouped(allMap.size / 31).zipWithIndex.toList
+    var updatedBefore = updatedZ
     val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
-    logger.info(s"created initalized map - updated size: ${updated.size}")
+    logger.info(s"created initalized map - updated size: ${updatedBefore.size}")
     // Loop
-    while (updated.nonEmpty) {
-      val list = allMapList.map {
+    while (updatedBefore.nonEmpty) {
+      val list = keyGrouped.map {
         case (v, i) =>
           F.async[Set[Int]](cb => {
             val update = scala.collection.mutable.Set.empty[Int]
-            v.foreach {
-              case (id, set) => {
-                val oldSize = set.size;
-                ldilMap.get(id).collect { value =>
-                  value.foreach { tid => if (updated.contains(tid)) set ++= allMap.get(tid).getOrElse(Set.empty) }
+            v.foreach(rdsid => {
+              ldilMap.get(rdsid).collect {
+                case ldil => {
+                  val d: Seq[scala.collection.Set[Int]] =
+                    ldil.filter(updatedBefore.contains).map(tid => allMap.get(tid).map(_.to)).flatten
+                  if (d.nonEmpty) {
+                    val set = allMap.get(rdsid).get.to
+                    val newSet = (d.flatten).toSet ++ set
+                    if (newSet.size > set.size) {
+                      update += rdsid
+                      allMap.update(rdsid, RDS(newSet))
+                    }
+                  }
                 }
-                if (set.size > oldSize) update += id
               }
-            }
+            })
             logger.info(s"end thread $i")
             cb(Right(update.toSet))
           })
       }.toList.parSequence.map(_.flatten.toSet)
-      updated = F.toIO(cs.evalOn(context)(list)).unsafeRunSync()
-      logger.info(s"updated size: ${updated.size}")
+      updatedBefore = F.toIO(cs.evalOn(context)(list)).unsafeRunSync()
+      logger.info(s"updated size: ${updatedBefore.size}")
     }
-    F.pure(allMap)
+    F.pure(allMap.toMap)
   }
 
-  private def initMap(ldilMap: LDILMap): (Map[Int, scala.collection.mutable.Set[Int]], Set[Int]) = {
-    val allMap = scala.collection.mutable.Map.empty[Int, scala.collection.mutable.Set[Int]]
+  private def initMap(ldilMap: LDILMap): (scala.collection.mutable.Map[Int, RDS], Set[Int]) = {
+    val allMap = scala.collection.mutable.Map.empty[Int, RDS]
     val updatedIni = scala.collection.mutable.Set.empty[Int]
     ldilMap.toList.map {
       case (id, set) => {
         if (set.nonEmpty) {
-          allMap.update(id, scala.collection.mutable.Set(set: _*))
+          allMap.update(id, RDS(set.toSet))
           updatedIni += id
         }
       }
     }
-    (allMap.toMap, updatedIni.toSet)
+    (allMap, updatedIni.toSet)
   }
 }

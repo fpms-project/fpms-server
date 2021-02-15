@@ -29,7 +29,7 @@ class RDSRedisRepository[F[_]](conf: RedisConfig)(implicit F: ConcurrentEffect[F
         case (miniMap, i) =>
           F.async[Unit](cb => {
             miniMap.grouped(100).foreach { v =>
-              F.toIO(cmd.mSet(v.map { case (i, v) => (key(i), v.src) })).unsafeRunSync()
+              F.toIO(cmd.mSet(v.map { case (i, v) => (key(i), v.toStr) })).unsafeRunSync()
             }
             logger.info(s"end $i")
             cb(Right(()))

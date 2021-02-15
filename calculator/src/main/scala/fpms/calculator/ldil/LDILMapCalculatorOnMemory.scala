@@ -49,7 +49,7 @@ class LDILMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parall
                   val ids = finder.findIds(pack)
                   map.update(pack.id, ids)
                 } catch {
-                  case e: InterruptedException => logger.error(e.getMessage())
+                  case e: InterruptedException => logger.debug(e.getMessage())
                   case _: Throwable              => ()
                 }
               }

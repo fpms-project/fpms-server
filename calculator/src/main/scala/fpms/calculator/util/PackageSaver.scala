@@ -18,7 +18,9 @@ object PackageSaver extends LazyLogging {
         val list = v
           .map(pack =>
             pack.versions
-              .map(x => Try { Some(LibraryPackage(pack.name, x.version, x.dep, x.id)) }.getOrElse(None))
+              .map(x =>
+                Try { Some(LibraryPackage(pack.name, x.version, x.dep, x.id, x.shasum, x.integrity)) }.getOrElse(None)
+              )
               .flatten
           )
           .flatten

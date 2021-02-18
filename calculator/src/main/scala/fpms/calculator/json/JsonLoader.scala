@@ -61,11 +61,12 @@ object JsonLoader extends LazyLogging {
           val x = convertList(v, id)
           id = x._2
           new PrintWriter(s"${config.getString("idjsondir")}${i}.json") {
-            write(x._1.asJson.toString())
+            write(x._1.asJson.noSpaces)
             close()
           }
+          logger.info(s"writing out $i.json")
         }
-        case Left(_) => None
+        case Left(e) => logger.error(s"error on $i.json convert json file:", e)
       }
     }
   }
@@ -78,7 +79,7 @@ object JsonLoader extends LazyLogging {
       val seq = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
       pack.versions.foreach { d =>
         try {
-          val info = LibraryPackage(pack.name, d.version, d.dep, d.id)
+          val info = LibraryPackage(pack.name, d.version, d.dep, d.id, d.shasum, d.integrity)
           seq += info
         } catch {
           case _: Throwable => {
@@ -96,7 +97,7 @@ object JsonLoader extends LazyLogging {
     var id = start
     val result = array.map(y =>
       RootInterfaceN(y.name, y.versions.map(v => {
-        val x = NpmPackageWithId(v.version, v.dep, id)
+        val x = NpmPackageWithId(v.version, v.dep, id, v.shasum, v.integrity)
         id += 1
         x
       }))

@@ -17,6 +17,8 @@ import fpms.repository.AddedPackageIdQueue
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
 
+import fpms.server.yarnlock.YarnLockGenerator
+
 class ServerApp[F[_]](
     packageRepo: LibraryPackageRepository[F],
     rdsRepository: RDSRepository[F],
@@ -66,7 +68,7 @@ class ServerApp[F[_]](
       defined <- packageRepo.findOne(pack.name, pack.version.original).map(_.isDefined)
       _ <- if (defined) F.raiseError(new Throwable("added package is already exists")) else F.pure(())
       id <- packageRepo.getMaxId().map(_ + 1)
-      _ <- packageRepo.insert(LibraryPackage(pack.name, pack.version, pack.deps, id))
+      _ <- packageRepo.insert(LibraryPackage(pack.name, pack.version, pack.deps, id, pack.shasum, pack.integrity))
       _ <- addedQueue.push(id)
     } yield ()
 
@@ -99,6 +101,12 @@ class ServerApp[F[_]](
             case Right(v) => Ok(v)
             case Left(v)  => NotFound(v)
           })
+        case GET -> Root / "getyarn" / name / range =>
+          getPackages(name, range).flatMap(_ match {
+            case Right(value) => Ok(YarnLockGenerator.generateYarn(value.packages + value.target, (name, range)))
+            case Left(value)  => NotFound(value)
+          })
+
         case req @ POST -> Root / "add" =>
           for {
             v <- req.as[LibraryPackage]

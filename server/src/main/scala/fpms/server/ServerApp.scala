@@ -16,6 +16,7 @@ import fpms.LibraryPackage
 import fpms.repository.AddedPackageIdQueue
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
+import org.http4s.headers.Location
 
 class ServerApp[F[_]](
     packageRepo: LibraryPackageRepository[F],
@@ -118,6 +119,9 @@ class ServerApp[F[_]](
               case Left(v)  => NotFound(v)
             })
           } yield res
+
+        case GET -> Root => 
+          TemporaryRedirect(Location(uri"https://github.com/sh4869/fpms-server"))
 
         case req @ POST -> Root / "add" =>
           for {

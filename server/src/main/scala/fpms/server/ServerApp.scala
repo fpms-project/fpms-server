@@ -16,8 +16,7 @@ import fpms.LibraryPackage
 import fpms.repository.AddedPackageIdQueue
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
-
-import fpms.server.yarnlock.YarnLockGenerator
+import org.http4s.headers.Location
 
 class ServerApp[F[_]](
     packageRepo: LibraryPackageRepository[F],
@@ -116,16 +115,13 @@ class ServerApp[F[_]](
             range <- if (r.isDefined) F.pure(r.get) else getLatestRange(name)
             request = PackageRequest(name, range)
             res <- getPackages(request).flatMap(_ match {
-              case Right(v) => Ok(PackageRDSResponse(request, v))
+              case Right(v) => Ok(v)
               case Left(v)  => NotFound(v)
             })
           } yield res
 
-        case GET -> Root / "getyarn" / name / range =>
-          getPackages(PackageRequest(name, range)).flatMap(_ match {
-            case Right(value) => Ok(YarnLockGenerator.generateYarn(value.packages + value.target, (name, range)))
-            case Left(value)  => NotFound(value)
-          })
+        case GET -> Root => 
+          TemporaryRedirect(Location(uri"https://github.com/sh4869/fpms-server"))
 
         case req @ POST -> Root / "add" =>
           for {

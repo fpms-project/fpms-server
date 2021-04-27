@@ -11,8 +11,8 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LDIL.LDILMap
-import fpms.RDS.RDSMap
 import fpms.RDS
+import fpms.RDS.RDSMap
 
 class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
     extends RDSMapCalculator[F]
@@ -21,9 +21,9 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     logger.info("start calculation of RDS")
     val (allMap, updatedZ) = initMap(ldilMap)
-    val keyGrouped = allMap.keySet.grouped(allMap.size / 31).zipWithIndex.toList
+    val keyGrouped = allMap.keySet.grouped(allMap.size / 15).zipWithIndex.toList
     var updatedBefore = updatedZ
-    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
+    val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(16))
     logger.info(s"created initalized map - updated size: ${updatedBefore.size}")
     // Loop
     while (updatedBefore.nonEmpty) {
@@ -34,14 +34,15 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
             v.foreach(rdsid => {
               ldilMap.get(rdsid).collect {
                 case ldil => {
-                  val d: Seq[scala.collection.Set[Int]] =
-                    ldil.filter(updatedBefore.contains).map(tid => allMap.get(tid).map(_.to)).flatten
+                  // 前回アップデートされたidそれぞれについてそれぞれの依存関係集合を取得
+                  val d = ldil.filter(updatedBefore.contains)
                   if (d.nonEmpty) {
-                    val set = allMap.get(rdsid).get.to
-                    val newSet = (d.flatten).toSet ++ set
-                    if (newSet.size > set.size) {
+                    val list = allMap.get(rdsid).get.to
+                    val depsList = d.map(tid => allMap.get(tid).map(_.to)).flatten.flatten
+                    val newList = (depsList ++ list).distinct
+                    if (newList.size > list.size) {
                       update += rdsid
-                      allMap.update(rdsid, RDS(newSet))
+                      allMap.update(rdsid, RDS(newList.toList))
                     }
                   }
                 }
@@ -58,12 +59,12 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
   }
 
   private def initMap(ldilMap: LDILMap): (scala.collection.mutable.Map[Int, RDS], Set[Int]) = {
-    val allMap = scala.collection.mutable.Map.empty[Int, RDS]
+    val allMap = scala.collection.mutable.LinkedHashMap.empty[Int, RDS]
     val updatedIni = scala.collection.mutable.Set.empty[Int]
     ldilMap.toList.map {
       case (id, set) => {
         if (set.nonEmpty) {
-          allMap.update(id, RDS(set.toSet))
+          allMap.update(id, RDS(set.toList))
           updatedIni += id
         }
       }

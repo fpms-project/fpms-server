@@ -42,7 +42,7 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
                     val newList = (depsList ++ list).distinct
                     if (newList.size > list.size) {
                       update += rdsid
-                      allMap.update(rdsid, RDS(newList.toList))
+                      allMap.update(rdsid, RDS(newList.toArray))
                     }
                   }
                 }
@@ -64,7 +64,7 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     ldilMap.toList.map {
       case (id, set) => {
         if (set.nonEmpty) {
-          allMap.update(id, RDS(set.toList))
+          allMap.update(id, RDS(set.toArray))
           updatedIni += id
         }
       }

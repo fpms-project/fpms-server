@@ -33,7 +33,7 @@ object JsonLoader extends LazyLogging {
   }
 
   def loadIdList(start: Int = 0, end: Int = MAX_FILE_COUNT): List[RootInterfaceN] = {
-    logger.info(s"load json filenum:  ${end}")
+    logger.info(s"load ${end} json files")
     val lists = scala.collection.mutable.ListBuffer.empty[RootInterfaceN]
     for (i <- start to end) {
       val src = readFile(s"${config.getString("idjsondir")}$i.json")

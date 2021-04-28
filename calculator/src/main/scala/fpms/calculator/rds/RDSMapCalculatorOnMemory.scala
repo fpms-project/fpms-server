@@ -21,40 +21,39 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     logger.info("start calculation of RDS")
     val (allMap, updatedZ) = initMap(ldilMap)
-    val keyGrouped = allMap.keySet.grouped(allMap.size / 15).zipWithIndex.toList
+    val keyGrouped = allMap.keySet.grouped(allMap.size / 15).toList
     var updatedBefore = updatedZ
     val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(16))
     logger.info(s"created initalized map - updated size: ${updatedBefore.size}")
     // Loop
     while (updatedBefore.nonEmpty) {
-      val list = keyGrouped.map {
-        case (v, i) =>
-          F.async[Set[Int]](cb => {
-            val update = scala.collection.mutable.Set.empty[Int]
-            v.foreach(rdsid => {
-              ldilMap.get(rdsid).collect {
-                case ldil => {
-                  // 前回アップデートされたidそれぞれについてそれぞれの依存関係集合を取得
-                  val d = ldil.filter(updatedBefore.contains)
-                  if (d.nonEmpty) {
-                    val list = allMap.get(rdsid).get.to
-                    val depsList = d.map(tid => allMap.get(tid).map(_.to)).flatten.flatten
-                    val newList = (depsList ++ list).distinct
-                    if (newList.size > list.size) {
-                      update += rdsid
-                      allMap.update(rdsid, RDS(newList.toArray))
-                    }
+      val list = keyGrouped.map { v =>
+        F.async[Set[Int]](cb => {
+          val update = scala.collection.mutable.Set.empty[Int]
+          v.foreach(rdsid => {
+            ldilMap.get(rdsid).collect {
+              case ldil => {
+                // 前回アップデートされたidそれぞれについてそれぞれの依存関係集合を取得
+                val d = ldil.filter(updatedBefore.contains)
+                if (d.nonEmpty) {
+                  val list = allMap.get(rdsid).get.to
+                  val depsList = d.map(tid => allMap.get(tid).map(_.to)).flatten.flatten
+                  val newList = (depsList ++ list).distinct
+                  if (newList.size > list.size) {
+                    update += rdsid
+                    allMap.update(rdsid, RDS(newList.toArray))
                   }
                 }
               }
-            })
-            logger.info(s"end thread $i")
-            cb(Right(update.toSet))
+            }
           })
+          cb(Right(update.toSet))
+        })
       }.toList.parSequence.map(_.flatten.toSet)
       updatedBefore = F.toIO(cs.evalOn(context)(list)).unsafeRunSync()
       logger.info(s"updated size: ${updatedBefore.size}")
     }
+    logger.info("complete to calculate rds for each package")
     F.pure(allMap.toMap)
   }
 

@@ -33,33 +33,30 @@ class LDILMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parall
   }
 
   private def updateMap(packMap: Map[String, Seq[LibraryPackage]]): F[LDILMap] = {
-    val packsGroupedByName = packMap.values.toList.map(_.toList).grouped(packMap.size / 16).zipWithIndex.toList
+    val packsGroupedByName = packMap.values.toList.map(_.toList).grouped(packMap.size / 15)
     val finder = new LatestDependencyFinder(packMap.get)
     logger.info(s"number of names of packages : ${packMap.size}")
     val executor = Executors.newFixedThreadPool(16)
     val context = ExecutionContext.fromExecutor(executor)
-    val x = F
-      .toIO(cs.evalOn(context)(packsGroupedByName.map {
-        case (list, i) => {
-          F.async[Map[Int, List[Int]]](cb => {
-            val map = scala.collection.mutable.Map.empty[Int, List[Int]]
-            list.foreach { v =>
-              v.foreach { pack =>
-                try {
-                  val ids = finder.findIds(pack)
-                  map.update(pack.id, ids)
-                } catch {
-                  case e: InterruptedException => logger.debug(e.getMessage())
-                  case _: Throwable              => ()
-                }
-              }
-            }
-            logger.info(s"end $i thread")
-            cb(Right(map.toMap))
-          })
+    val func = (list: List[List[LibraryPackage]]) => {
+      val map = scala.collection.mutable.Map.empty[Int, List[Int]]
+      list.foreach(_.foreach { pack =>
+        try {
+          val ids = finder.findIds(pack)
+          map.update(pack.id, ids)
+        } catch {
+          case e: InterruptedException => logger.debug(e.getMessage())
+          case _: Throwable            => ()
         }
-      }.toList.parSequence.map(_.flatten.toMap)))
-      .unsafeRunSync()
-    F.pure(x)
+      })
+      map.toMap
+    }
+    val z: F[LDILMap] = packsGroupedByName
+      .map(list => F.async[Map[Int, List[Int]]](_(Right(func(list)))))
+      .toList
+      .parSequence
+      .map(_.flatten.toMap)
+    logger.info("start calculate ldil")
+    cs.evalOn(context)(z)
   }
 }

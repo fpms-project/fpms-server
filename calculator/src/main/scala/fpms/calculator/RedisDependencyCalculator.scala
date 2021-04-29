@@ -33,11 +33,12 @@ class RedisDependencyCalculator[F[_]](
     logger.info("start setup")
     for {
       idMap <- ldilCalcurator.init
+      _ <- F.pure(logger.info("complete to calculate ldil for each package"))
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.insert(idMap)
-      _ <- F.pure(logger.info("ldil sync"))
+      _ <- F.pure(logger.info("ldil is saved"))
       _ <- rdsContainer.insert(x)
-      _ <- F.pure(logger.info("rds sync"))
+      _ <- F.pure(logger.info("rds is saved"))
     } yield ()
   }
 

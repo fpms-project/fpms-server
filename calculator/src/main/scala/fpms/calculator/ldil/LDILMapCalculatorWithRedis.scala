@@ -30,12 +30,12 @@ class LDILMapCalculatorWithRedis[F[_]](
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
     val sortedAdds = adds.sortWith((a, b) => if (a.name == b.name) a.version < b.version else a.name > b.name)
     val result = for {
-      empty <- mvar.isEmpty
-      beforeMap <- if (empty) createInitialMapFromRedis() else mvar.read
-      _ <- F.pure(logger.info("get before values"))
       semaphore <- Semaphore(16)
+      beforeMap <- getOrCreateLdilMap()
+      _ <- F.pure(logger.info("geted before values"))
       // 追加されたパッケージについてのLDILを作成する
-      added <- sortedAdds.map(v => getLDILForAddedPackage(v)).toList.parSequence.map(_.flatten.toMap)
+      added <- sortedAdds.map(v => getLDIL(v)).toList.parSequence.map(_.flatten.toMap)
+      _ <- F.pure(logger.info("create ldil list for added packages"))
       // 追加されたパッケージによって更新されるLDILを計算する
       x <- sortedAdds.map(v => createShouldUpdateList(v, beforeMap, semaphore)).parSequence.map {
         _.reduce { (a, b) =>
@@ -57,12 +57,12 @@ class LDILMapCalculatorWithRedis[F[_]](
     } yield v
   }
 
-  private def getLDILForAddedPackage(p: LibraryPackage): F[Option[(Int, Seq[Int])]] = {
+  private def getLDIL(p: LibraryPackage): F[Option[(Int, Seq[Int])]] = {
     try {
       p.deps.map {
         case (name, cond) =>
-          packageRepo.findByName(name).map(_.latestInFits(cond).toOption.get.id)
-      }.toSeq.parSequence.map(seq => Some(p.id -> seq))
+          packageRepo.findByName(name).map(_.latestInFits(cond).toOption.map(_.id))
+      }.toSeq.sequence.map(seq => Some(p.id -> seq.flatten))
     } catch {
       case _: Throwable => F.pure(None)
     }
@@ -107,10 +107,16 @@ class LDILMapCalculatorWithRedis[F[_]](
   private def filterAcceptableNewVersion(p: LibraryPackage, list: Seq[LibraryPackage]) =
     list.filter(_.deps.get(p.name).exists(v => Try { semver_parser.Range(v).valid(p.version) }.getOrElse(false)))
 
-  private def createInitialMapFromRedis(): F[Map[Int, Seq[Int]]] =
-    for {
-      max <- packageRepo.getMaxId()
-      z <- ldilRepo.get((0 to max).toSeq)
-    } yield z
+  private def getOrCreateLdilMap(): F[Map[Int, Seq[Int]]] =
+    mvar.isEmpty.flatMap(empty =>
+      if (empty) {
+        for {
+          max <- packageRepo.getMaxId()
+          z <- ldilRepo.get((0 to max).toSeq)
+        } yield z
+      } else {
+        mvar.read
+      }
+    )
 
 }

@@ -56,12 +56,12 @@ class RedisDependencyCalculator[F[_]](
 
   private def update(list: Seq[LibraryPackage]) = {
     for {
-      _ <- F.pure(s"start_update_by_add_package : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}")
+      _ <- F.pure(logger.info(s"start_update_by_add_package : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
       idMap <- ldilCalcurator.update(list)
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.insert(idMap)
       _ <- rdsContainer.insert(x)
-      _ <- F.pure(s"end_update_by_add_package : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}")
+      _ <- F.pure(logger.info(s"end_update_by_add_package : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
     } yield ()
   }
 }

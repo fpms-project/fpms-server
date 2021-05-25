@@ -34,9 +34,9 @@ class LDILRedisRepository[F[_]](conf: RedisConfig)(implicit F: ConcurrentEffect[
               } yield m.map {
                 case (k, value) => k.split(prefix)(1).toInt -> value.splitToSeq
               }.toMap
-            val x = seq.grouped(100).map(v => F.toIO(f(v)).unsafeRunSync())
-            logger.info(s"end get thread $i")
-            cb(Right(x.reduce((a, b) => a ++ b)))
+            val x = seq.grouped(100).map(v => F.toIO(f(v)).unsafeRunSync()).reduce((a, b) => a ++ b)
+            logger.info(s"end get ldils in thread ${i}")
+            cb(Right(x))
           })
         }
       }.toList.parSequence.map(_.reduce((a, b) => a ++ b))

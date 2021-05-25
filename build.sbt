@@ -16,7 +16,7 @@ Compile / run / fork := true
 
 lazy val common = (project in file("common")).settings(
   name := "fpms-common",
-  libraryDependencies ++= CommonDeps ++ DoobieDeps ++ Seq("dev.profunktor" %% "redis4cats-effects" % "0.11.0")
+  libraryDependencies ++= CommonDeps ++ DoobieDeps ++ Seq("dev.profunktor" %% "redis4cats-effects" % "0.13.1")
 )
 
 lazy val calculator = (project in file("calculator"))

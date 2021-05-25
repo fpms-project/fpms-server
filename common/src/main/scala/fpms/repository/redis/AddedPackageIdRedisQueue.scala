@@ -9,11 +9,13 @@ import dev.profunktor.redis4cats.hlist._
 import dev.profunktor.redis4cats.transactions.RedisTransaction
 
 import fpms.repository.AddedPackageIdQueue
+import cats.Parallel
 
 class AddedPackageIdRedisQueue[F[_]](conf: RedisConfig)(
     implicit F: ConcurrentEffect[F],
     cs: ContextShift[F],
-    timer: Timer[F]
+    timer: Timer[F],
+    p: Parallel[F]
 ) extends AddedPackageIdQueue[F]
     with LazyLogging
     with RedisLog[F] {

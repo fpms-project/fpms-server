@@ -25,7 +25,8 @@ lazy val calculator = (project in file("calculator"))
     fork := true,
     libraryDependencies ++= CommonDeps ++ Seq(
       "commons-io" % "commons-io" % "2.8.0",
-      "com.github.scopt" %% "scopt" % "3.7.1"
+      "com.github.scopt" %% "scopt" % "3.7.1",
+      "com.github.cb372" % "cats-retry_2.13" % "2.1.1"
     ) ++ DoobieDeps,
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,

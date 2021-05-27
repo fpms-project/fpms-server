@@ -33,8 +33,9 @@ class LDILMapCalculatorWithRedis[F[_]](
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
     val sortedAdds = adds.sortWith((a, b) => if (a.name == b.name) a.version < b.version else a.name > b.name)
     val result = for {
+      // ldil mapを取得する
       beforeMap <- getOrCreateLdilMap()
-      _ <- F.pure(logger.info("geted before values"))
+      _ <- F.pure(logger.info("get before ldil"))
       // 追加されたパッケージについてのLDILを作成する
       added <- sortedAdds.map(v => getLDIL(v)).toList.parSequence.map(_.flatten.toMap)
       _ <- F.pure(logger.info("create ldil list for added packages"))
@@ -54,6 +55,7 @@ class LDILMapCalculatorWithRedis[F[_]](
     }
     for {
       v <- result
+      // 二回目以降はredisにアクセスしなくていいように
       _ <- mvar.tryTake
       _ <- mvar.put(v)
     } yield v
@@ -86,21 +88,29 @@ class LDILMapCalculatorWithRedis[F[_]](
       ts <- packageRepo.findByDeps(p.name).map(v => filterAcceptableNewVersion(p, v))
       _ <- F.pure(logger.info(s"get candide list of ${p.name}@${p.version.original} / ${ts.length}"))
       // TODO: リファクタリング
-      grouped = ts.grouped(ts.size / 16)
-      x <- grouped.map { group =>
-        F.async[Map[Int, Map[Int, Int]]](cb => {
-          val z = group
-            .map(v => {
-              ldilMap.get(v.id).fold(F.pure[Option[(Int, Map[Int, Int])]](None)) { list =>
-                retryingOnAllErrors(retry, onError = onError)(findAddAndRemovePair(v, list, p))
-              }
-            })
-            .sequence
-            .map(_.flatten.toMap)
-          cb(Right(F.toIO(z).unsafeRunSync()))
-        })
-      }.toSeq.parSequence.map(_.flatten.toMap)
-      _ <- F.pure(logger.info(s"end should update list: ${p.name}@${p.version.original}"))
+      x <- {
+        if (ts.size > 0) {
+          val grouped = ts.grouped(ts.size / 16)
+          for {
+            x <- grouped.map { group =>
+              F.async[Map[Int, Map[Int, Int]]](cb => {
+                val z = group
+                  .map(v => {
+                    ldilMap.get(v.id).fold(F.pure[Option[(Int, Map[Int, Int])]](None)) { list =>
+                      retryingOnAllErrors(retry, onError = onError)(findAddAndRemovePair(v, list, p))
+                    }
+                  })
+                  .sequence
+                  .map(_.flatten.toMap)
+                cb(Right(F.toIO(z).unsafeRunSync()))
+              })
+            }.toSeq.parSequence.map(_.flatten.toMap)
+            _ <- F.pure(logger.info(s"end should update list: ${p.name}@${p.version.original}"))
+          } yield x
+        } else {
+          F.pure(Map.empty[Int, Map[Int, Int]])
+        }
+      }
     } yield x
   }
 

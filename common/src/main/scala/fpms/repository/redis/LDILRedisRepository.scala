@@ -59,8 +59,8 @@ class LDILRedisRepository[F[_]](conf: RedisConfig)(implicit F: ConcurrentEffect[
             cb(Right(()))
           })
         }
-      }
-    }.toList.parSequence_
+      }.toList.parSequence_
+    }
   }
 
   private val prefix = s"directed_"

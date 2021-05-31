@@ -105,7 +105,7 @@ class LDILMapCalculatorWithRedis[F[_]](
                 cb(Right(F.toIO(z).unsafeRunSync()))
               })
             }.toSeq.parSequence.map(_.flatten.toMap)
-            _ <- F.pure(logger.info(s"end should update list: ${p.name}@${p.version.original}"))
+            _ <- F.pure(logger.info(s"end should update list of ${p.name}@${p.version.original} : (size: ${x.size})"))
           } yield x
         } else {
           F.pure(Map.empty[Int, Map[Int, Int]])

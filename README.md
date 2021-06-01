@@ -5,6 +5,31 @@ fpms-server
 
 The client of this is [here](https://www.npmjs.com/package/fpms-client).
 
+# How to start the server
+
+## requirements
+
+- redis
+- postgres
+
+## preparation
+
+- copy `src/main/resources/app_example.conf` to `src/main/resources/app.conf` and modify it 
+- generate json data by [this script](https://github.com/sh4869/get-all-package-info) and put it into the directly 
+specified in app.conf (`json.jsondir`)
+
+## At first time
+
+```bash
+sbt run init --prepare
+```
+
+## From a second time
+
+```bash
+sbt run
+```
+
 # API
 
 - HOST: `http://fpms-server.cs.ise.shibaura-it.ac.jp`
@@ -59,29 +84,18 @@ returns the calculated `$name` package.
 }
 ```
 
+## `POST /add`
 
+added packages to the server.
 
-# How to start the server
+### body format
 
-## requirements
-
-- redis
-- postgres
-
-## preparation
-
-- copy `src/main/resources/app_example.conf` to `src/main/resources/app.conf` and modify it 
-- generate json data by [this script](https://github.com/sh4869/get-all-package-info) and put it into the directly 
-specified in app.conf (`json.jsondir`)
-
-## At first time
-
-```bash
-sbt run init --prepare
 ```
-
-## From a second time
-
-```bash
-sbt run
+{
+  "id": 0, // always 0
+  "name": "package_name", // package name 
+  "version": "0.0.0", // semantic version
+  "deps": {}, // deps of packages
+  "shasum": "" // shasum of package. It can get in npm or yarn api.
+}
 ```

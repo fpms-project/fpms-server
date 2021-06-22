@@ -16,6 +16,8 @@ import fpms.LibraryPackage
 import fpms.repository.AddedPackageIdQueue
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
+import org.http4s.Response
+import org.http4s.Status
 
 class ServerApp[F[_]](
     packageRepo: LibraryPackageRepository[F],
@@ -120,7 +122,7 @@ class ServerApp[F[_]](
           } yield res
 
         case GET -> Root =>
-          Ok(ServerApp.ROOT_DESCRIPTION)
+          F.pure(Response.apply(Status.Ok, body = fs2.Stream(ServerApp.ROOT_DESCRIPTION.getBytes().toList: _*)))
 
         case req @ POST -> Root / "add" =>
           for {
@@ -148,7 +150,9 @@ object RangeQueryParamMatcher extends OptionalQueryParamDecoderMatcher[String]("
 
 object ServerApp {
   val ROOT_DESCRIPTION =
-    """# API
+    """
+<!doctype html><meta charset="utf-8"><script src="https://unpkg.com/@makenowjust/md.html@0.4.2"></script><noscript>
+# API
 
 - HOST: `http://fpms-server.cs.ise.shibaura-it.ac.jp`
 

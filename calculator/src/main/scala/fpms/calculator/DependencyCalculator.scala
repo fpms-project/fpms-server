@@ -16,7 +16,7 @@ import fpms.repository.RDSRepository
 import fpms.calculator.ldil.LDILMapCalculator
 import fpms.calculator.rds.RDSMapCalculator
 
-class RedisDependencyCalculator[F[_]](
+class DependencyCalculator[F[_]](
     packageRepository: LibraryPackageRepository[F],
     ldilCalcurator: LDILMapCalculator[F],
     ldilContainer: LDILRepository[F],

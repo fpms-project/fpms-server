@@ -26,8 +26,7 @@ class RedisDependencyCalculator[F[_]](
 )(
     implicit F: ConcurrentEffect[F],
     timer: Timer[F]
-) extends DependencyCalculator[F]
-    with LazyLogging {
+) extends LazyLogging {
 
   def initialize(): F[Unit] = {
     logger.info("start setup")
@@ -55,13 +54,16 @@ class RedisDependencyCalculator[F[_]](
   }
 
   private def update(list: Seq[LibraryPackage]) = {
+    val listtext = list.map(x => s"${x.name}@${x.version.original}").mkString(",")
     for {
-      _ <- F.pure(logger.info(s"start_update_by_add_package : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
+      _ <- F.pure(logger.info(s"start_update_by_add_package : ${listtext}"))
       idMap <- ldilCalcurator.update(list)
       x <- rdsMapCalculator.calc(idMap)
       _ <- ldilContainer.insert(idMap)
       _ <- rdsContainer.insert(x)
-      _ <- F.pure(logger.info(s"end_update_by_add_package : ${list.map(x => s"${x.name}@${x.version.original}").mkString(",")}"))
+      _ <- F.pure(
+        logger.info(s"end_update_by_add_package : ${listtext}")
+      )
     } yield ()
   }
 }

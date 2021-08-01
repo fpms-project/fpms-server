@@ -14,15 +14,10 @@ case class PackageSqlFormat(
     shasum: String,
     integrity: Option[String]
 ) {
-  def to: LibraryPackage =
-    LibraryPackage(
-      name,
-      SemVer(version),
-      deps.as[Map[String, String]].toOption.getOrElse(Map.empty),
-      id,
-      shasum,
-      integrity
-    )
+  def to: LibraryPackage = {
+    val dep = deps.as[Map[String, String]].toOption.getOrElse(Map.empty)
+    LibraryPackage(name, SemVer(version), dep, id, shasum, integrity)
+  }
 }
 
 object PackageSqlFormat {

@@ -24,28 +24,28 @@ class RDSMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Paralle
     var updatedBefore = updatedZ
     val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
     logger.info(s"created initalized map - updated size: ${updatedBefore.size}")
+    val updateDeps = (rdsid: Int) => {
+      val updates = ldilMap.get(rdsid).get.filter(updatedBefore.contains)
+      if (updates.nonEmpty) {
+        val beforeRds = allMap.get(rdsid).get
+        val depsList = updates.map(tid => allMap.get(tid)).flatten.flatten
+        val newList = (depsList ++ beforeRds).distinct
+        if (newList.size > beforeRds.size) {
+          allMap.update(rdsid, newList.toArray)
+          Some(rdsid)
+        } else {
+          None
+        }
+      } else {
+        None
+      }
+    }
     // Loop
     while (updatedBefore.nonEmpty) {
       val list = keyGrouped.map { v =>
         F.async[Set[Int]](cb => {
           val update = scala.collection.mutable.Set.empty[Int]
-          v.foreach(rdsid => {
-            ldilMap.get(rdsid).collect {
-              case ldil => {
-                // 前回アップデートされたidそれぞれについてそれぞれの依存関係集合を取得
-                val d = ldil.filter(updatedBefore.contains)
-                if (d.nonEmpty) {
-                  val list = allMap.get(rdsid).get
-                  val depsList = d.map(tid => allMap.get(tid)).flatten.flatten
-                  val newList = (depsList ++ list).distinct
-                  if (newList.size > list.size) {
-                    update += rdsid
-                    allMap.update(rdsid, newList.toArray)
-                  }
-                }
-              }
-            }
-          })
+          v.foreach(rdsid => updateDeps(rdsid).collect(v => update += v))
           cb(Right(update.toSet))
         })
       }.toList.parSequence.map(_.flatten.toSet)

@@ -38,33 +38,10 @@ object FpmsCalculator extends IOApp {
   def run(args: List[String]): IO[ExitCode] = {
     parser.parse(args, ArgOptionConfig()) match {
       case Some(arg) => {
-        val config = ConfigFactory.load("app.conf")
-        val repo = new LibraryPackageSqlRepository[IO](
-          PostgresConfig(config.getConfig("server.postgresql"))
-        )
         if (arg.mode == "prepare") {
-          println("-> prepare data")
-          if (arg.convert) {
-            println("--> convert json")
-            JsonLoader.convertJson()
-          }
-          println("--> save data to sql(it takes more than one hour)")
-          PackageSaver.saveJson(JsonLoader.loadIdList().toList, repo)
-          IO.unit.as(ExitCode.Success)
+          prepare(arg.convert)
         } else {
-          val conf = RedisConfig(config.getConfig("server.redis"))
-          for {
-            m <- MVar.empty[IO, Map[Int, Seq[Int]]]
-            lc = new LDILRedisRepository[IO](conf)
-            lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
-            rmc = new RDSMapCalculatorOnMemory[IO]()
-            rc = new RDSRedisRepository[IO](conf)
-            aq = new AddedPackageIdRedisQueue[IO](conf)
-            calcurator = new RedisDependencyCalculator(repo, lmc, lc, rmc, rc, aq)
-
-            _ <- if (arg.mode == "init") calcurator.initialize() else IO.pure(())
-            _ <- calcurator.loop()
-          } yield ExitCode.Success
+          run(arg.mode == "init")
         }
       }
       case None => {
@@ -73,4 +50,35 @@ object FpmsCalculator extends IOApp {
       }
     }
   }
+
+  private def run(init: Boolean): IO[ExitCode] = {
+    val conf = RedisConfig(config.getConfig("server.redis"))
+    for {
+      m <- MVar.empty[IO, Map[Int, Seq[Int]]]
+      lc = new LDILRedisRepository[IO](conf)
+      lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
+      rmc = new RDSMapCalculatorOnMemory[IO]()
+      rc = new RDSRedisRepository[IO](conf)
+      aq = new AddedPackageIdRedisQueue[IO](conf)
+      calcurator = new DependencyCalculator(repo, lmc, lc, rmc, rc, aq)
+      _ <- if (init) calcurator.initialize() else IO.pure(())
+      _ <- calcurator.loop()
+    } yield ExitCode.Success
+  }
+
+  private def prepare(convert: Boolean): IO[ExitCode] = {
+    println("-> prepare data")
+    if (convert) {
+      println("--> convert json")
+      JsonLoader.convertJson()
+    }
+    println("--> save data to sql(it takes more than one hour)")
+    PackageSaver.saveJson(JsonLoader.loadIdList().toList, repo)
+    IO.unit.as(ExitCode.Success)
+  }
+
+  private lazy val config = ConfigFactory.load("app.conf")
+  private lazy val repo = new LibraryPackageSqlRepository[IO](
+    PostgresConfig(config.getConfig("server.postgresql"))
+  )
 }

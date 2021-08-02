@@ -17,17 +17,21 @@ The client of this is [here](https://www.npmjs.com/package/fpms-client).
 - copy `src/main/resources/app_example.conf` to `src/main/resources/app.conf` and modify it 
 - generate json data by [this script](https://github.com/sh4869/get-all-package-info) and put it into the directly 
 specified in app.conf (`json.jsondir`)
+- run `sbt "project calculator" run prepare --convert` for saving packge data into postgres
 
-## At first time
+## Start server
+
+
+* server 
 
 ```bash
-sbt run init --prepare
+sbt "project server" run
 ```
 
-## From a second time
+* calculator
 
 ```bash
-sbt run
+sbt "project calculator" run init
 ```
 
 # API

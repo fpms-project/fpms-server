@@ -28,7 +28,7 @@ class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(
   }
 
   def insert(packs: List[LibraryPackage]): F[Unit] = {
-    val s = "insert into package (name, version, deps, id, shasum, integrity) values (?, ?, ?, ?, ?, ?)"
+    val s = "insert into package (name, version, deps, id, shasum, integrity) values (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
     Update[PackageSqlFormat](s).updateMany(packs.map(PackageSqlFormat.from)).transact(transactor).as(())
   }
 

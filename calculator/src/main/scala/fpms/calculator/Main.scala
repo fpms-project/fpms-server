@@ -16,8 +16,8 @@ import fpms.repository.db.PostgresConfig
 
 import fpms.calculator.json.JsonLoader
 import fpms.calculator.ldil.LDILMapCalculatorWithRedis
-import fpms.calculator.rds.RDSMapCalculatorOnMemory
 import fpms.calculator.util.PackageSaver
+import fpms.calculator.rds.RoundRobinRDSMapCalculator
 
 object FpmsCalculator extends IOApp {
   case class ArgOptionConfig(
@@ -57,7 +57,7 @@ object FpmsCalculator extends IOApp {
       m <- MVar.empty[IO, Map[Int, Seq[Int]]]
       lc = new LDILRedisRepository[IO](conf)
       lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
-      rmc = new RDSMapCalculatorOnMemory[IO]()
+      rmc = new RoundRobinRDSMapCalculator[IO]
       rc = new RDSRedisRepository[IO](conf)
       aq = new AddedPackageIdRedisQueue[IO](conf)
       calcurator = new DependencyCalculator(repo, lmc, lc, rmc, rc, aq)

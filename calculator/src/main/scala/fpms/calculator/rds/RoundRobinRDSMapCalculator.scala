@@ -17,12 +17,13 @@ class RoundRobinRDSMapCalculator[F[_]](implicit F: ConcurrentEffect[F], P: Paral
     extends RDSMapCalculator[F]
     with LazyLogging {
 
-  lazy val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(32))
+  lazy val THREAD_NUM = Runtime.getRuntime().availableProcessors()
+  lazy val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(THREAD_NUM))
 
   def calc(ldilMap: LDILMap): F[RDSMap] = {
     logger.info("start calculation of RDS")
     val (allMap, updatedZ) = initMap(ldilMap)
-    val keyGrouped = allMap.keySet.grouped(allMap.size / 31).toList
+    val keyGrouped = allMap.keySet.grouped(allMap.size / (THREAD_NUM - 1)).toList
     var updatedBefore = updatedZ
     logger.info(s"created initalized map - updated size: ${updatedBefore.size}")
     // Loop

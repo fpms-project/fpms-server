@@ -3,7 +3,7 @@ package fpms.calculator.ldil
 import fpms.LibraryPackage
 
 class LatestDependencyFinder(findFunc: (String) => Option[Seq[LibraryPackage]]) {
-  import VersionFinder._
+  import VersionFinder.*
 
   private val depCache = scala.collection.mutable.Map.empty[(String, String), Int]
 

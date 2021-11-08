@@ -5,17 +5,15 @@ import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel
-import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
-import cats.implicits._
+import cats.implicits.*
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LDIL.LDILMap
 import fpms.RDS.RDSMap
+import cats.effect.kernel.Async
+import doobie.util.update
 
-class RoundRobinRDSMapCalculator[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
-    extends RDSMapCalculator[F]
-    with LazyLogging {
+class RoundRobinRDSMapCalculator[F[_]: Async](implicit P: Parallel[F]) extends RDSMapCalculator[F] with LazyLogging {
 
   lazy val THREAD_NUM = Runtime.getRuntime().availableProcessors()
   lazy val context = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(THREAD_NUM))
@@ -27,19 +25,32 @@ class RoundRobinRDSMapCalculator[F[_]](implicit F: ConcurrentEffect[F], P: Paral
     var updatedBefore = updatedZ
     logger.info(s"created initalized map - updated size: ${updatedBefore.size}")
     // Loop
-    while (updatedBefore.nonEmpty) {
-      val list = keyGrouped.map { v =>
-        F.async[Set[Int]](cb => {
-          val update = scala.collection.mutable.Set.empty[Int]
-          v.foreach(rdsid => updateDeps(rdsid, ldilMap, allMap, updatedBefore).collect(v => update += v))
-          cb(Right(update.toSet))
-        })
-      }.toList.parSequence.map(_.flatten.toSet)
-      updatedBefore = F.toIO(cs.evalOn(context)(list)).unsafeRunSync()
-      logger.info(s"updated size: ${updatedBefore.size}")
-    }
-    logger.info("complete to calculate rds for each package")
-    F.pure(allMap.toMap)
+    loop(ldilMap, allMap, keyGrouped, updatedBefore)
+  }
+
+  def loop(
+      ldilMap: LDILMap,
+      allMap: scala.collection.mutable.Map[Int, Array[Int]],
+      keyGrouped: List[scala.collection.Set[Int]],
+      updatedBefore: Set[Int]
+  ): F[RDSMap] = {
+    val list = keyGrouped.map { v =>
+      Async[F].async_[Set[Int]](cb => {
+        val update = scala.collection.mutable.Set.empty[Int]
+        v.foreach(rdsid => updateDeps(rdsid, ldilMap, allMap, updatedBefore).collect(v => update += v))
+        cb(Right(update.toSet))
+      })
+    }.toList.parSequence.map(_.flatten.toSet)
+    for {
+      updatedBefore <- list
+      z <- if(updatedBefore.isEmpty){
+        logger.info("complete to calculate rds for each package")
+        Async[F].pure(allMap.toMap)
+      } else {
+        logger.info(s"updated size: ${updatedBefore.size}")
+        loop(ldilMap, allMap, keyGrouped, updatedBefore)
+      }
+    } yield z
   }
 
   private def updateDeps(

@@ -3,8 +3,8 @@ package fpms.server
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
-import com.typesafe.config._
-import org.http4s.server.blaze.BlazeServerBuilder
+import com.typesafe.config.*
+import org.http4s.blaze.server.BlazeServerBuilder
 
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.repository.redis.RDSRedisRepository

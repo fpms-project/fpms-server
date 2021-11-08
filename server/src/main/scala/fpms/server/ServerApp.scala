@@ -1,16 +1,16 @@
 package fpms.server
 
 import cats.data.EitherT
-import cats.effect.ConcurrentEffect
-import cats.implicits._
+import cats.implicits.*
 import com.github.sh4869.semver_parser.Range
 import com.typesafe.scalalogging.LazyLogging
-import io.circe.generic.auto._
+import io.circe.generic.auto.*
 import org.http4s.HttpApp
 import org.http4s.HttpRoutes
-import org.http4s.dsl._
+import org.http4s.dsl.*
 import org.http4s.dsl.impl.OptionalQueryParamDecoderMatcher
-import org.http4s.implicits._
+import org.http4s.implicits.*
+import cats.effect.implicits.*
 
 import fpms.LibraryPackage
 import fpms.repository.AddedPackageIdQueue
@@ -18,13 +18,12 @@ import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
 import org.http4s.Response
 import org.http4s.Status
+import cats.effect.kernel.Async
 
-class ServerApp[F[_]](
+class ServerApp[F[_] : Async] (
     packageRepo: LibraryPackageRepository[F],
     rdsRepository: RDSRepository[F],
     addedQueue: AddedPackageIdQueue[F]
-)(
-    implicit F: ConcurrentEffect[F]
 ) extends LazyLogging {
   object dsl extends Http4sDsl[F]
 
@@ -68,7 +67,7 @@ class ServerApp[F[_]](
   def add(pack: LibraryPackage) =
     for {
       defined <- packageRepo.findOne(pack.name, pack.version.original).map(_.isDefined)
-      _ <- if (defined) F.raiseError(new Throwable("added package is already exists")) else F.pure(())
+      _ <- if (defined) Async[F].raiseError(new Throwable("added package is already exists")) else Async[F].pure(())
       id <- packageRepo.getMaxId().map(_ + 1)
       _ <- packageRepo.insert(LibraryPackage(pack.name, pack.version, pack.deps, id, pack.shasum, pack.integrity))
       _ <- addedQueue.push(id)
@@ -88,11 +87,11 @@ class ServerApp[F[_]](
       })
 
   def app(): HttpApp[F] = {
-    import dsl._
+    import dsl.*
     implicit val libraryEncoder = LibraryPackage.encoder
-    import org.http4s.circe.CirceEntityEncoder._
+    import org.http4s.circe.CirceEntityEncoder.*
     implicit val libraryDecoder = LibraryPackage.decoder
-    import org.http4s.circe.CirceEntityDecoder._
+    import org.http4s.circe.CirceEntityDecoder.*
 
     HttpRoutes
       .of[F] {
@@ -113,7 +112,7 @@ class ServerApp[F[_]](
 
         case GET -> Root / "calculated" / name :? RangeQueryParamMatcher(r) =>
           for {
-            range <- if (r.isDefined) F.pure(r.get) else getLatestRange(name)
+            range <- if (r.isDefined) Async[F].pure(r.get) else getLatestRange(name)
             request = PackageRequest(name, range)
             res <- getPackages(request).flatMap(_ match {
               case Right(v) => Ok(v)
@@ -122,7 +121,7 @@ class ServerApp[F[_]](
           } yield res
 
         case GET -> Root =>
-          F.pure(Response.apply(Status.Ok, body = fs2.Stream(ServerApp.ROOT_DESCRIPTION.getBytes().toList: _*)))
+          Async[F].pure(Response.apply(Status.Ok, body = fs2.Stream(ServerApp.ROOT_DESCRIPTION.getBytes().toList*)))
 
         case req @ POST -> Root / "add" =>
           for {

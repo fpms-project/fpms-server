@@ -1,17 +1,17 @@
 package fpms.repository.redis
 
 import cats.Parallel
-import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
-import cats.implicits._
+import cats.implicits.*
+import cats.effect.implicits.*
 import com.typesafe.scalalogging.LazyLogging
 import dev.profunktor.redis4cats.RedisCommands
 
 import fpms.RDS
 import fpms.repository.RDSRepository
-import fpms.repository.redis.RedisDataConversion._
+import fpms.repository.redis.RedisDataConversion.*
+import cats.effect.kernel.Async
 
-class RDSRedisRepository[F[_]](conf: RedisConfig)(implicit F: ConcurrentEffect[F], cs: ContextShift[F], P: Parallel[F])
+class RDSRedisRepository[F[_]: Async](conf: RedisConfig)(implicit P: Parallel[F])
     extends RDSRepository[F]
     with LazyLogging
     with RedisLog[F] {
@@ -28,13 +28,13 @@ class RDSRedisRepository[F[_]](conf: RedisConfig)(implicit F: ConcurrentEffect[F
   private def _insert(map: RDS.RDSMap)(cmd: RedisCommands[F, String, String]): F[Unit] = {
     val indexed = map.grouped(map.size / 16).zipWithIndex
     val insertFunc = (miniMap: Map[Int, Array[Int]]) => {
-      miniMap.grouped(100).foreach { v =>
-        F.toIO(cmd.mSet(v.map { case (i, v) => (key(i), v.mkString(",")) })).unsafeRunSync()
-      }
+      miniMap.grouped(100).map { v => 
+        cmd.mSet(v.map { case (i, v) => (key(i), v.mkString(",")) })
+      }.toList.sequence_
     }
     indexed.map {
       case (m, i) =>
-        F.async[Unit](cb => {
+        Async[F].async_[Unit](cb => {
           insertFunc(m)
           logger.info(s"end $i")
           cb(Right(()))

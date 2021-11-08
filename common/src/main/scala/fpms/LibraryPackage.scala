@@ -40,7 +40,7 @@ object LibraryPackage {
       Json.obj(
         ("name", Json.fromString(a.name)),
         ("version", Json.fromString(a.version.original)),
-        ("dep", Json.obj(a.deps.map(x => (x._1, Json.fromString(x._2))).toSeq: _*)),
+        ("dep", Json.obj(a.deps.map(x => (x._1, Json.fromString(x._2))).toSeq*)),
         ("shasum", Json.fromString(a.shasum)),
         ("integrity", Json.fromString(a.integrity.getOrElse("")))
       )

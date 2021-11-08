@@ -1,21 +1,17 @@
 package fpms.repository.redis
 
-import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
-import cats.effect.Timer
-import cats.implicits._
+import cats.implicits.*
 import com.typesafe.scalalogging.LazyLogging
-import dev.profunktor.redis4cats.hlist._
+import dev.profunktor.redis4cats.hlist.*
 import dev.profunktor.redis4cats.transactions.RedisTransaction
 import dev.profunktor.redis4cats.RedisCommands
 
 import fpms.repository.AddedPackageIdQueue
 import cats.Parallel
+import cats.effect.kernel.Async
 
 class AddedPackageIdRedisQueue[F[_]](conf: RedisConfig)(
-    implicit F: ConcurrentEffect[F],
-    cs: ContextShift[F],
-    timer: Timer[F],
+    implicit F: Async[F],
     p: Parallel[F]
 ) extends AddedPackageIdQueue[F]
     with LazyLogging

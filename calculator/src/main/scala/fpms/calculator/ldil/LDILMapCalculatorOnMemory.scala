@@ -5,16 +5,15 @@ import java.util.concurrent.Executors
 import scala.concurrent.ExecutionContext
 
 import cats.Parallel
-import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
-import cats.implicits._
+import cats.implicits.*
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LibraryPackage
 import fpms.LDIL.LDILMap
 import fpms.calculator.json.JsonLoader
+import cats.effect.kernel.Async
 
-class LDILMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F])
+class LDILMapCalculatorOnMemory[F[_] : Async](implicit  P: Parallel[F])
     extends LDILMapCalculator[F]
     with LazyLogging {
 
@@ -52,11 +51,11 @@ class LDILMapCalculatorOnMemory[F[_]](implicit F: ConcurrentEffect[F], P: Parall
       map.toMap
     }
     val z: F[LDILMap] = packsGroupedByName
-      .map(list => F.async[Map[Int, List[Int]]](_(Right(func(list)))))
+      .map(list => Async[F].async_[Map[Int, List[Int]]](_(Right(func(list)))))
       .toList
       .parSequence
       .map(_.flatten.toMap)
     logger.info("start calculate ldil")
-    cs.evalOn(context)(z)
+    z
   }
 }

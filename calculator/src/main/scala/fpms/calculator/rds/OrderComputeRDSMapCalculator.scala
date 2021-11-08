@@ -1,12 +1,12 @@
 package fpms.calculator.rds
 
-import cats.effect.ConcurrentEffect
 import com.typesafe.scalalogging.LazyLogging
 
 import fpms.LDIL
 import fpms.RDS
+import cats.effect.kernel.Async
 
-class OrderComputeRDSMapCalculator[F[_]](implicit F: ConcurrentEffect[F])
+class OrderComputeRDSMapCalculator[F[_]: Async]()
     extends RDSMapCalculator[F] with LazyLogging {
   def calc(ldilMap: LDIL.LDILMap): F[RDS.RDSMap] = {
     val allMap = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]
@@ -15,12 +15,12 @@ class OrderComputeRDSMapCalculator[F[_]](implicit F: ConcurrentEffect[F])
       val rds = calcRDS(v._1._1, ldilMap, allMap)
       allMap.addOne((v._1._1, rds))
     })
-    F.pure(allMap.toMap)
+    Async[F].pure(allMap.toMap)
   }
 
   def calcRDS(id: Int, ldilMap: LDIL.LDILMap, allMap: scala.collection.mutable.LinkedHashMap[Int, Array[Int]]) = {
-    val set = scala.collection.mutable.HashSet(ldilMap.get(id).getOrElse(Seq.empty): _*)
-    val request = scala.collection.mutable.HashSet(ldilMap.get(id).getOrElse(Seq.empty): _*)
+    val set = scala.collection.mutable.HashSet(ldilMap.get(id).getOrElse(Seq.empty)*)
+    val request = scala.collection.mutable.HashSet(ldilMap.get(id).getOrElse(Seq.empty)*)
     val requested = scala.collection.mutable.HashSet.empty[Int]
     while (request.size > 0) {
       request.toSeq.foreach((id: Int) => {

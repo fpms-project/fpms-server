@@ -1,19 +1,17 @@
 package fpms.repository.db
 
-import cats.effect.ConcurrentEffect
-import cats.implicits._
+import cats.implicits.*
 import io.circe.Json
-import doobie._
-import doobie.implicits._
-import doobie.postgres.circe.json.implicits._
+import doobie.*
+import doobie.implicits.*
+import doobie.postgres.circe.json.implicits.*
 
 import fpms.LibraryPackage
 import fpms.repository.LibraryPackageRepository
-import cats.effect.ContextShift
+import cats.effect.kernel.Async
 
-class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(
-    implicit F: ConcurrentEffect[F],
-    cs: ContextShift[F]
+class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(implicit
+    F: Async[F]
 ) extends LibraryPackageRepository[F] {
 
   lazy private val transactor = Transactor.fromDriverManager[F](

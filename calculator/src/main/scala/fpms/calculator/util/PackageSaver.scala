@@ -9,10 +9,11 @@ import fpms.LibraryPackage
 import fpms.calculator.json.RootInterfaceN
 import fpms.repository.db.LibraryPackageSqlRepository
 import fpms.calculator.json.NpmPackageWithId
+import cats.effect.unsafe.IORuntime
 
 object PackageSaver extends LazyLogging {
   val GROUPED = 100
-  def saveJson(packages: List[RootInterfaceN], repo: LibraryPackageSqlRepository[IO]) = {
+  def saveJson(packages: List[RootInterfaceN], repo: LibraryPackageSqlRepository[IO])(implicit runtime: IORuntime) = {
     packages.grouped(GROUPED).zipWithIndex.foreach {
       case (v, i) => {
         if ((i * GROUPED) % 10000 == 0) logger.info(s"save in db: ${i * GROUPED}/${packages.length}")

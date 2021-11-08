@@ -3,8 +3,7 @@ package fpms.calculator
 import cats.effect.ExitCode
 import cats.effect.IO
 import cats.effect.IOApp
-import cats.effect.concurrent.MVar
-import com.typesafe.config._
+import com.typesafe.config.*
 import scopt.OptionParser
 
 import fpms.repository.db.LibraryPackageSqlRepository
@@ -18,6 +17,8 @@ import fpms.calculator.json.JsonLoader
 import fpms.calculator.ldil.LDILMapCalculatorWithRedis
 import fpms.calculator.util.PackageSaver
 import fpms.calculator.rds.RoundRobinRDSMapCalculator
+import cats.effect.unsafe.IORuntime
+import cats.effect.std.Queue
 
 object FpmsCalculator extends IOApp {
   case class ArgOptionConfig(
@@ -54,7 +55,7 @@ object FpmsCalculator extends IOApp {
   private def run(init: Boolean): IO[ExitCode] = {
     val conf = RedisConfig(config.getConfig("server.redis"))
     for {
-      m <- MVar.empty[IO, Map[Int, Seq[Int]]]
+      m <- Queue.bounded[IO, Map[Int, Seq[Int]]](1)
       lc = new LDILRedisRepository[IO](conf)
       lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
       rmc = new RoundRobinRDSMapCalculator[IO]
@@ -73,7 +74,7 @@ object FpmsCalculator extends IOApp {
       JsonLoader.convertJson()
     }
     println("--> save data to sql(it takes more than one hour)")
-    PackageSaver.saveJson(JsonLoader.loadIdList().toList, repo)
+    PackageSaver.saveJson(JsonLoader.loadIdList().toList, repo)(IORuntime.global)
     IO.unit.as(ExitCode.Success)
   }
 

@@ -6,9 +6,9 @@ import java.nio.charset.StandardCharsets
 
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
-import io.circe.generic.auto._
+import io.circe.generic.auto.*
 import io.circe.parser.decode
-import io.circe.syntax._
+import io.circe.syntax.*
 import org.apache.commons.io.FileUtils
 
 import fpms.LibraryPackage

@@ -1,12 +1,11 @@
 val FpmsVersion = "0.1.0"
-val FpmsScalaVersion = "2.13.4"
+val FpmsScalaVersion = "3.0.2"
 
-val Http4sVersion = "0.21.0"
-val CirceVersion = "0.12.0"
+val Http4sVersion = "1.0.0-M29"
+val CirceVersion = "0.14.1"
 val Specs2Version = "4.1.0"
 val LogbackVersion = "1.2.3"
-val DoobieVersion = "0.8.8"
-val CatsVersion = "2.3.0"
+val DoobieVersion = "1.0.0-RC1"
 
 ThisBuild / scalafixDependencies += "com.github.liancheng" %% "organize-imports" % "0.4.4"
 ThisBuild / version := FpmsVersion
@@ -16,7 +15,7 @@ Compile / run / fork := true
 
 lazy val common = (project in file("common")).settings(
   name := "fpms-common",
-  libraryDependencies ++= CommonDeps ++ DoobieDeps ++ Seq("dev.profunktor" %% "redis4cats-effects" % "0.13.1")
+  libraryDependencies ++= CommonDeps ++ DoobieDeps ++ Seq("dev.profunktor" %% "redis4cats-effects" % "1.0.0")
 )
 
 lazy val calculator = (project in file("calculator"))
@@ -25,13 +24,11 @@ lazy val calculator = (project in file("calculator"))
     fork := true,
     libraryDependencies ++= CommonDeps ++ Seq(
       "commons-io" % "commons-io" % "2.8.0",
-      "com.github.scopt" %% "scopt" % "3.7.1",
-      "com.github.cb372" % "cats-retry_2.13" % "2.1.1"
+      "com.github.scopt" %% "scopt" % "4.0.1",
+      "com.github.cb372" %% "cats-retry" % "3.1.0"
     ) ++ DoobieDeps,
     semanticdbEnabled := true,
     semanticdbVersion := scalafixSemanticdb.revision,
-    addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
-    addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
     javaOptions := Seq(
       "-verbose:gc.log",
       "-Xlog:gc*:file=./logs/gc/gc_%t_%p.log:time,uptime,level,tags",
@@ -63,16 +60,16 @@ lazy val server = (project in file("server"))
   .dependsOn(common)
 
 lazy val CommonDeps = Seq(
-  "com.github.sh4869" %% "semver-parser-scala" % "0.0.4",
+  "com.github.sh4869" %% "semver-parser-scala" % "0.0.6",
   "com.typesafe" % "config" % "1.4.0",
-  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.2",
+  "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
   "ch.qos.logback" % "logback-classic" % LogbackVersion
 ) ++ CatsDeps ++ CirceDeps
 
 lazy val CatsDeps = Seq(
-  "org.typelevel" %% "cats-core",
-  "org.typelevel" %% "cats-effect"
-).map(_ % CatsVersion)
+  "org.typelevel" %% "cats-core" % "2.6.1",
+  "org.typelevel" %% "cats-effect" % "3.1.1"
+)
 
 lazy val http4sDeps = Seq(
   "org.http4s" %% "http4s-blaze-server",
@@ -86,7 +83,6 @@ lazy val http4sDeps = Seq(
 lazy val CirceDeps = Seq(
   "io.circe" %% "circe-core",
   "io.circe" %% "circe-generic",
-  "io.circe" %% "circe-generic-extras",
   "io.circe" %% "circe-parser"
 ).map(_ % CirceVersion)
 
@@ -103,16 +99,14 @@ lazy val defaultscalacOptions = Seq(
   "UTF-8",
   "-language:higherKinds",
   "-language:postfixOps",
-  "-language:higherKinds",
   "-feature",
   "-Xfatal-warnings",
-  "log4j2.debug",
-  "-Ywarn-unused"
+  "-source:future"
 )
 
-assemblyMergeStrategy in assembly := {
+assembly / assemblyMergeStrategy := {
   case "META-INF/io.netty.versions.properties" => MergeStrategy.concat
   case x =>
-    val oldStrategy = (assemblyMergeStrategy in assembly).value
+    val oldStrategy = (assembly / assemblyMergeStrategy).value
     oldStrategy(x)
 }

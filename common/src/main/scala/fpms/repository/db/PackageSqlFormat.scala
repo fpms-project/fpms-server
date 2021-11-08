@@ -2,7 +2,7 @@ package fpms.repository.db
 
 import com.github.sh4869.semver_parser.SemVer
 import io.circe.Json
-import io.circe.syntax._
+import io.circe.syntax.*
 
 import fpms.LibraryPackage
 

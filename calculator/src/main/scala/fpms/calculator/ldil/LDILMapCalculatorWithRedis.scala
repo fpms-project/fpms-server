@@ -2,15 +2,12 @@ package fpms.calculator.ldil
 
 import scala.util.Try
 
-import retry._
+import retry.*
 import cats.Parallel
-import cats.effect.ConcurrentEffect
-import cats.effect.ContextShift
-import cats.effect.concurrent.MVar2
-import cats.implicits._
+import cats.implicits.*
 import com.github.sh4869.semver_parser
 import com.typesafe.scalalogging.LazyLogging
-import scala.concurrent.duration._
+import scala.concurrent.duration.*
 
 import fpms.LibraryPackage
 import fpms.LDIL.LDILMap
@@ -18,15 +15,18 @@ import fpms.repository.LDILRepository
 import fpms.repository.LibraryPackageRepository
 import retry.RetryDetails.GivingUp
 import retry.RetryDetails.WillDelayAndRetry
+import cats.effect.kernel.Async
+import cats.effect.std.Queue
+import scala.util.control.NonLocalReturns
 
-class LDILMapCalculatorWithRedis[F[_]](
+class LDILMapCalculatorWithRedis[F[_]: Async](
     packageRepo: LibraryPackageRepository[F],
     ldilRepo: LDILRepository[F],
-    mvar: MVar2[F, Map[Int, Seq[Int]]]
-)(implicit F: ConcurrentEffect[F], P: Parallel[F], cs: ContextShift[F], s: Sleep[F])
+    queue: Queue[F, Map[Int, Seq[Int]]]
+)(implicit P: Parallel[F], s: Sleep[F])
     extends LDILMapCalculator[F]
     with LazyLogging {
-  import VersionFinder._
+  import VersionFinder.*
 
   def init: F[LDILMap] = new LDILMapCalculatorOnMemory[F].init
 
@@ -37,46 +37,41 @@ class LDILMapCalculatorWithRedis[F[_]](
     val ldilMap = for {
       // ldil mapを取得する
       beforeMap <- getOrCreateLdilMap()
-      _ <- F.pure(logger.info("get before ldil"))
+      _ <- Async[F].pure(logger.info("get before ldil"))
       // 追加されたパッケージについてのLDILを作成する
       added <- sortedAdds.map(v => getLDIL(v)).toList.parSequence.map(_.flatten.toMap)
-      _ <- F.pure(logger.info("create ldil list for added packages"))
+      _ <- Async[F].pure(logger.info("create ldil list for added packages"))
       // 追加されたパッケージによって更新されるLDILを計算する
       idToUpdatePairMap <- sortedAdds.map(v => createShouldUpdateList(v, beforeMap)).parSequence.map(combineUpdateList)
-      _ <- F.pure(logger.info("all calc end"))
+      _ <- Async[F].pure(logger.info("all calc end"))
     } yield {
       // 更新するべきリストを使って計算を行う
-      val updateLdil = idToUpdatePairMap.map {
-        case (id, updateList) =>
-          id -> (beforeMap.get(id).get.filter(v => !updateList.keySet.contains(v)) ++ updateList.values).toList
+      val updateLdil = idToUpdatePairMap.map { case (id, updateList) =>
+        id -> (beforeMap.get(id).get.filter(v => !updateList.keySet.contains(v)) ++ updateList.values).toList
       }
       beforeMap ++ added ++ updateLdil
     }
     for {
       v <- ldilMap
       // 二回目以降はredisにアクセスしなくていいように
-      _ <- mvar.tryTake
-      _ <- mvar.put(v)
+      _ <- queue.tryTake
+      _ <- queue.offer(v)
     } yield v
   }
 
   private def getLDIL(p: LibraryPackage): F[Option[(Int, Seq[Int])]] = {
     try {
-      p.deps.map {
-        case (name, cond) =>
-          packageRepo.findByName(name).map(_.latestInFits(cond).toOption.map(_.id))
+      p.deps.map { case (name, cond) =>
+        packageRepo.findByName(name).map(_.latestInFits(cond).toOption.map(_.id))
       }.toSeq.sequence.map(seq => Some(p.id -> seq.flatten))
     } catch {
-      case _: Throwable => F.pure(None)
+      case _: Throwable => Async[F].pure(None)
     }
   }
 
-  /**
-    * pとldilMapから更新すべきパッケージの一覧を取得する
+  /** pとldilMapから更新すべきパッケージの一覧を取得する
     *
-    * 返り値のMap[Int, Map[Int, Int]]はどういう値かというと
-    * Map[変更する対象のパッケージのID(A), Map[AのLDILの中から取り除くID, AのLDILの中に新たに追加するID]]
-    * となっている。
+    * 返り値のMap[Int, Map[Int, Int]]はどういう値かというと Map[変更する対象のパッケージのID(A), Map[AのLDILの中から取り除くID, AのLDILの中に新たに追加するID]] となっている。
     * 最初のvalueはMapとはなっているが、基本的には要素1である。
     *
     * @param target
@@ -89,30 +84,35 @@ class LDILMapCalculatorWithRedis[F[_]](
       ldilMap: Map[Int, Seq[Int]]
   ): F[Map[Int, Map[Int, Int]]] = {
     for {
-      _ <- F.pure(logger.info(s"create should update list: ${p.name}@${p.version.original}"))
+      _ <- Async[F].pure(logger.info(s"create should update list: ${p.name}@${p.version.original}"))
       // p.name のパッケージに依存しそのパッケージのバージョン条件を p.version が満たすものを探す
       ts <- packageRepo.findByDeps(p.name).map(v => filterAcceptableNewVersion(p, v))
-      _ <- F.pure(logger.info(s"get candide list of ${p.name}@${p.version.original} / ${ts.length}"))
+      _ <- Async[F].pure(logger.info(s"get candide list of ${p.name}@${p.version.original} / ${ts.length}"))
       // TODO: リファクタリング
       updateList <- {
         // もし候補が存在しなかったらなし
-        if (ts.size > 0) return F.pure(Map.empty[Int, Map[Int, Int]])
-        // 存在した場合はそれぞれについてUpdatePairを作る
-        val grouped = ts.grouped(ts.size / 16)
-        val createUpdateList = (v: LibraryPackage) => {
-          val ldil = ldilMap.get(v.id)
-          if (ldil.isDefined) {
-            retryingOnAllErrors(retry, onError = onError)(findAddAndRemovePair(v, ldil.get, p))
-          } else {
-            F.pure[Option[(Int, Map[Int, Int])]](None)
+        if (ts.size > 0) Async[F].pure(Map.empty[Int, Map[Int, Int]])
+        else {
+          // 存在した場合はそれぞれについてUpdatePairを作る
+          val grouped = ts.grouped(ts.size / 16)
+          val createUpdateList = (v: LibraryPackage) => {
+            val ldil = ldilMap.get(v.id)
+            if (ldil.isDefined) {
+              retryingOnAllErrors(retry, onError = onError)(findAddAndRemovePair(v, ldil.get, p))
+            } else {
+              Async[F].pure[Option[(Int, Map[Int, Int])]](None)
+            }
           }
+          grouped.map { group =>
+            Async[F].async_[Map[Int, Map[Int, Int]]](cb => {
+              for {
+                z <- group.map(createUpdateList).sequence.map(_.flatten.toMap)
+              } yield {
+                cb(Right(z))
+              }
+            })
+          }.toSeq.parSequence.map(_.flatten.toMap)
         }
-        grouped.map { group =>
-          F.async[Map[Int, Map[Int, Int]]](cb => {
-            val z = group.map(createUpdateList).sequence.map(_.flatten.toMap)
-            cb(Right(F.toIO(z).unsafeRunSync()))
-          })
-        }.toSeq.parSequence.map(_.flatten.toMap)
       }
     } yield updateList
   }
@@ -131,25 +131,24 @@ class LDILMapCalculatorWithRedis[F[_]](
 
   private def ldilPackages(lidl: Seq[Int]): F[List[LibraryPackage]] = packageRepo.findByIds(lidl.toList)
 
-  /**
-    * pをdirectly-dependencyとして受け入れることのできるパッケージをlistから抽出する
+  /** pをdirectly-dependencyとして受け入れることのできるパッケージをlistから抽出する
     */
   private def filterAcceptableNewVersion(p: LibraryPackage, list: Seq[LibraryPackage]) =
     list.filter(_.deps.get(p.name).exists(v => Try { semver_parser.Range(v).valid(p.version) }.getOrElse(false)))
 
   private def getOrCreateLdilMap(): F[Map[Int, Seq[Int]]] =
-    mvar.isEmpty.flatMap(empty =>
-      if (empty) {
+    queue.tryTake.flatMap(empty =>
+      if (empty.isEmpty) {
         for {
           max <- packageRepo.getMaxId()
           z <- ldilRepo.get((0 to max).toSeq)
         } yield z
       } else {
-        mvar.read
+        queue.take
       }
     )
 
-  private def combineUpdateList(list: Seq[Map[Int, Map[Int, Int]]]): Map[Int,Map[Int,Int]] = {
+  private def combineUpdateList(list: Seq[Map[Int, Map[Int, Int]]]): Map[Int, Map[Int, Int]] = {
     list.reduce((a, b) =>
       // あとから足したものに上書きされるのでこの順序でOK
       (a.keySet ++ b.keySet)
@@ -160,9 +159,9 @@ class LDILMapCalculatorWithRedis[F[_]](
 
   private def onError(err: Throwable, details: RetryDetails): F[Unit] = details match {
     case GivingUp(totalRetries, totalDelay) =>
-      F.pure(logger.error(s"Error on ${totalRetries} times in ${totalDelay}: ", err))
+      Async[F].pure(logger.error(s"Error on ${totalRetries} times in ${totalDelay}: ", err))
     case WillDelayAndRetry(_, _, _) =>
-      F.pure(())
+      Async[F].pure(())
   }
 
   private lazy val retry = RetryPolicies.constantDelay[F](300.millisecond)

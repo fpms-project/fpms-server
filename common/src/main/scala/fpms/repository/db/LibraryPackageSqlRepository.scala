@@ -30,9 +30,9 @@ class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(implicit
   def insert(packs: List[LibraryPackage]): F[Unit] = {
     val s =
       "insert into package (name, version, deps, id, shasum, integrity) values (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
-    Update[(String, String, Json, Int, String, Option[String], Int)](s)
+    Update[(String, String, Json, Int, String, Option[String])](s)
       .updateMany[List](
-        packs.map(PackageSqlFormat.from).map(v => (v.name, v.version, v.deps, v.id, v.shasum, v.integrity, v.id))
+        packs.map(PackageSqlFormat.from).map(v => (v.name, v.version, v.deps, v.id, v.shasum, v.integrity))
       )
       .transact(transactor)
       .as(())

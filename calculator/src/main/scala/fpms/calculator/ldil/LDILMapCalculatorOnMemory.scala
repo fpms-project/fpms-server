@@ -12,14 +12,18 @@ import fpms.LibraryPackage
 import fpms.LDIL.LDILMap
 import fpms.calculator.json.JsonLoader
 import cats.effect.kernel.Async
+import fpms.calculator.package_map.PackageMapGenerator
 
-class LDILMapCalculatorOnMemory[F[_] : Async](implicit  P: Parallel[F])
+class LDILMapCalculatorOnMemory[F[_] : Async](mapGenerator: PackageMapGenerator[F])(implicit  P: Parallel[F])
     extends LDILMapCalculator[F]
     with LazyLogging {
 
   private val added = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
   def init: F[LDILMap] = {
-    updateMap(JsonLoader.createNamePackagesMap())
+    for {
+     map <- mapGenerator.getMap
+     x <- updateMap(map)
+    } yield x
   }
 
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {

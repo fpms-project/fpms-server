@@ -19,6 +19,7 @@ import fpms.calculator.util.PackageSaver
 import fpms.calculator.rds.RoundRobinRDSMapCalculator
 import cats.effect.unsafe.IORuntime
 import cats.effect.std.Queue
+import fpms.calculator.package_map.DBPackageMapGenerator
 
 object FpmsCalculator extends IOApp {
   case class ArgOptionConfig(
@@ -57,7 +58,8 @@ object FpmsCalculator extends IOApp {
     for {
       m <- Queue.bounded[IO, Map[Int, Seq[Int]]](1)
       lc = new LDILRedisRepository[IO](conf)
-      lmc = new LDILMapCalculatorWithRedis[IO](repo, lc, m)
+      gen = new DBPackageMapGenerator[IO](repo)
+      lmc = new LDILMapCalculatorWithRedis[IO](gen, repo, lc, m)
       rmc = new RoundRobinRDSMapCalculator[IO]
       rc = new RDSRedisRepository[IO](conf)
       aq = new AddedPackageIdRedisQueue[IO](conf)

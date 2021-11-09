@@ -18,8 +18,10 @@ import retry.RetryDetails.WillDelayAndRetry
 import cats.effect.kernel.Async
 import cats.effect.std.Queue
 import scala.util.control.NonLocalReturns
+import fpms.calculator.package_map.PackageMapGenerator
 
 class LDILMapCalculatorWithRedis[F[_]: Async](
+    mapGenerator: PackageMapGenerator[F],
     packageRepo: LibraryPackageRepository[F],
     ldilRepo: LDILRepository[F],
     queue: Queue[F, Map[Int, Seq[Int]]]
@@ -28,7 +30,7 @@ class LDILMapCalculatorWithRedis[F[_]: Async](
     with LazyLogging {
   import VersionFinder.*
 
-  def init: F[LDILMap] = new LDILMapCalculatorOnMemory[F].init
+  def init: F[LDILMap] = new LDILMapCalculatorOnMemory[F](mapGenerator).init
 
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
     // 追加されたパッケージをここでソートする。

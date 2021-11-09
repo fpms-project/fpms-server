@@ -71,36 +71,17 @@ object JsonLoader extends LazyLogging {
     }
   }
 
-  def createNamePackagesMap(): Map[String, Seq[LibraryPackage]] = {
-    val packs = loadIdList()
-    logger.info("loaded json files")
-    val packs_map = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]]
-    packs.foreach { pack =>
-      val seq = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
-      pack.versions.foreach { d =>
-        try {
-          val info = LibraryPackage(pack.name, d.version, d.dep, d.id, d.shasum, d.integrity)
-          seq += info
-        } catch {
-          case _: Throwable => {
-            logger.info(s"error parsing version: ${pack.name}, ${d.version}")
-          }
-        }
-      }
-      packs_map += (pack.name -> seq.toSeq)
-    }
-    logger.info("complete convert to list")
-    packs_map.toMap
-  }
-
   private def convertList(array: List[RootInterface], start: Int): (List[RootInterfaceN], Int) = {
     var id = start
     val result = array.map(y =>
-      RootInterfaceN(y.name, y.versions.map(v => {
-        val x = NpmPackageWithId(v.version, v.dep, id, v.shasum, v.integrity)
-        id += 1
-        x
-      }))
+      RootInterfaceN(
+        y.name,
+        y.versions.map(v => {
+          val x = NpmPackageWithId(v.version, v.dep, id, v.shasum, v.integrity)
+          id += 1
+          x
+        })
+      )
     )
     (result, id)
   }

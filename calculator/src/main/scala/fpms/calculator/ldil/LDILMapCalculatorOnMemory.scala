@@ -12,23 +12,30 @@ import fpms.LibraryPackage
 import fpms.LDIL.LDILMap
 import fpms.calculator.json.JsonLoader
 import cats.effect.kernel.Async
+import fpms.calculator.package_map.PackageMapGenerator
 
-class LDILMapCalculatorOnMemory[F[_] : Async](implicit  P: Parallel[F])
+class LDILMapCalculatorOnMemory[F[_]: Async](mapGenerator: PackageMapGenerator[F])(implicit P: Parallel[F])
     extends LDILMapCalculator[F]
     with LazyLogging {
 
   private val added = scala.collection.mutable.ListBuffer.empty[LibraryPackage]
   def init: F[LDILMap] = {
-    updateMap(JsonLoader.createNamePackagesMap())
+    for {
+      map <- mapGenerator.getMap
+      x <- updateMap(map)
+    } yield x
   }
 
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
     added ++= adds
     // 追加されたパッケージについてpackMapを更新する
     // (packMapに存在していれば（すでに存在するパッケージの新しいバージョンであれば）最後に追加して更新、そうでなければ新しいキーの作成)
-    val packMap = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]] ++ JsonLoader.createNamePackagesMap()
-    added.foreach { v => packMap.update(v.name, packMap.get(v.name).getOrElse(Seq.empty) :+ v) }
-    updateMap(packMap.toMap)
+    for {
+      oldMap <- mapGenerator.getMap
+      packMap = scala.collection.mutable.Map.empty[String, Seq[LibraryPackage]] ++ oldMap
+      _ <- Async[F].pure(added.foreach { v => packMap.update(v.name, packMap.get(v.name).getOrElse(Seq.empty) :+ v) })
+      x <- updateMap(packMap.toMap)
+    } yield x
   }
 
   private def updateMap(packMap: Map[String, Seq[LibraryPackage]]): F[LDILMap] = {

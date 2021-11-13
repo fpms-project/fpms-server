@@ -20,17 +20,17 @@ import cats.effect.std.Queue
 import scala.util.control.NonLocalReturns
 import fpms.calculator.package_map.PackageMapGenerator
 
-class LDILMapCalculatorWithRedis[F[_]: Async](
+class LDILMapGeneratorWithRedis[F[_]: Async](
     mapGenerator: PackageMapGenerator[F],
     packageRepo: LibraryPackageRepository[F],
     ldilRepo: LDILRepository[F],
     queue: Queue[F, Map[Int, Seq[Int]]]
 )(implicit P: Parallel[F], s: Sleep[F])
-    extends LDILMapCalculator[F]
+    extends LDILMapGenerator[F]
     with LazyLogging {
   import VersionFinder.*
 
-  def init: F[LDILMap] = new LDILMapCalculatorOnMemory[F](mapGenerator).init
+  def init: F[LDILMap] = new LDILMapGeneratorOnMemory[F](mapGenerator).init
 
   def update(adds: Seq[LibraryPackage]): F[LDILMap] = {
     // 追加されたパッケージをここでソートする。

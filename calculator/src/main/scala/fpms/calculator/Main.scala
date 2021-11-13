@@ -14,9 +14,9 @@ import fpms.repository.redis.RedisConfig
 import fpms.repository.db.PostgresConfig
 
 import fpms.calculator.json.JsonLoader
-import fpms.calculator.ldil.LDILMapCalculatorWithRedis
+import fpms.calculator.ldil.LDILMapGeneratorWithRedis
 import fpms.calculator.util.PackageSaver
-import fpms.calculator.rds.RoundRobinRDSMapCalculator
+import fpms.calculator.rds.RoundRobinRDSMapGenerator
 import cats.effect.unsafe.IORuntime
 import cats.effect.std.Queue
 import fpms.calculator.package_map.DBPackageMapGenerator
@@ -59,8 +59,8 @@ object FpmsCalculator extends IOApp {
       m <- Queue.bounded[IO, Map[Int, Seq[Int]]](1)
       lc = new LDILRedisRepository[IO](conf)
       gen = new DBPackageMapGenerator[IO](repo)
-      lmc = new LDILMapCalculatorWithRedis[IO](gen, repo, lc, m)
-      rmc = new RoundRobinRDSMapCalculator[IO]
+      lmc = new LDILMapGeneratorWithRedis[IO](gen, repo, lc, m)
+      rmc = new RoundRobinRDSMapGenerator[IO]
       rc = new RDSRedisRepository[IO](conf)
       aq = new AddedPackageIdRedisQueue[IO](conf)
       calcurator = new DependencyCalculator(repo, lmc, lc, rmc, rc, aq)

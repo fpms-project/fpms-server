@@ -6,12 +6,11 @@ import fpms.LDIL
 import fpms.RDS
 import cats.effect.kernel.Async
 
-class OrderComputeRDSMapCalculator[F[_]: Async]()
-    extends RDSMapCalculator[F] with LazyLogging {
-  def calc(ldilMap: LDIL.LDILMap): F[RDS.RDSMap] = {
+class OrderComputeRDSMapGenerator[F[_]: Async]() extends RDSMapGenerator[F] with LazyLogging {
+  override def generate(ldilMap: LDIL.LDILMap): F[RDS.RDSMap] = {
     val allMap = scala.collection.mutable.LinkedHashMap.empty[Int, Array[Int]]
     ldilMap.zipWithIndex.foreach(v => {
-      if(v._2 % 1000000 == 0) logger.info(s"compute ${v._2} / ${ldilMap.size}")
+      if (v._2 % 1000000 == 0) logger.info(s"compute ${v._2} / ${ldilMap.size}")
       val rds = calcRDS(v._1._1, ldilMap, allMap)
       allMap.addOne((v._1._1, rds))
     })
@@ -27,7 +26,7 @@ class OrderComputeRDSMapCalculator[F[_]: Async]()
         requested.add(id)
         if (allMap.get(id).isDefined) {
           set.addAll(allMap.get(id).get)
-        } else if(ldilMap.get(id).isDefined) {
+        } else if (ldilMap.get(id).isDefined) {
           val ldil = ldilMap.get(id).get
           set.addAll(ldil)
           request.addAll(ldil.filterNot(requested.contains))

@@ -14,6 +14,14 @@ case class LibraryPackage(
     integrity: Option[String]
 )
 
+case class LibraryPackageWithOutId(
+    name: String,
+    version: SemVer,
+    deps: Map[String, String],
+    shasum: String,
+    integrity: Option[String]
+)
+
 object LibraryPackage {
   def apply(
       name: String,
@@ -56,5 +64,47 @@ object LibraryPackage {
       "integrity"
     )(
       LibraryPackage.apply
+    )
+}
+
+object LibraryPackageWithOutId {
+  def apply(
+      name: String,
+      version: String,
+      dep: Option[Map[String, String]],
+      shasum: String,
+      integrity: Option[String]
+  ) =
+    new LibraryPackageWithOutId(name, SemVer(version), dep.getOrElse(Map.empty[String, String]), shasum, integrity)
+
+  def apply(
+      name: String,
+      version: String,
+      dep: Map[String, String],
+      shasum: String,
+      integrity: Option[String]
+  ) =
+    new LibraryPackageWithOutId(name, SemVer(version), dep, shasum, integrity)
+
+  implicit val encoder: Encoder[LibraryPackageWithOutId] = new Encoder[LibraryPackageWithOutId] {
+    final def apply(a: LibraryPackageWithOutId): Json =
+      Json.obj(
+        ("name", Json.fromString(a.name)),
+        ("version", Json.fromString(a.version.original)),
+        ("dep", Json.obj(a.deps.map(x => (x._1, Json.fromString(x._2))).toSeq*)),
+        ("shasum", Json.fromString(a.shasum)),
+        ("integrity", Json.fromString(a.integrity.getOrElse("")))
+      )
+  }
+
+  implicit val decoder: Decoder[LibraryPackageWithOutId] =
+    Decoder.forProduct5[LibraryPackageWithOutId, String, String, Map[String, String], String, Option[String]](
+      "name",
+      "version",
+      "deps",
+      "shasum",
+      "integrity"
+    )(
+      LibraryPackageWithOutId.apply
     )
 }

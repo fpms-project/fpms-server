@@ -3,6 +3,7 @@ package fpms.repository.db
 import cats.implicits.*
 import io.circe.Json
 import doobie.*
+import io.circe.syntax.*
 import doobie.implicits.*
 import doobie.postgres.circe.json.implicits.*
 
@@ -10,10 +11,13 @@ import fpms.LibraryPackage
 import fpms.repository.LibraryPackageRepository
 import cats.effect.kernel.Async
 import doobie.util.transactor
+import fpms.LibraryPackageWithOutId
+import com.typesafe.scalalogging.LazyLogging
 
 class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(implicit
     F: Async[F]
-) extends LibraryPackageRepository[F] {
+) extends LibraryPackageRepository[F]
+    with LazyLogging {
 
   lazy private val transactor = Transactor.fromDriverManager[F](
     "org.postgresql.Driver",
@@ -27,7 +31,17 @@ class LibraryPackageSqlRepository[F[_]](conf: PostgresConfig)(implicit
     Update[PackageSqlFormat](s).toUpdate0(PackageSqlFormat.from(pack)).run.transact(transactor).as(())
   }
 
+  def insert(pack: LibraryPackageWithOutId): F[LibraryPackage] = {
+    val s =
+      sql"insert into package (name, version, deps, shasum, integrity) values (${pack.name}, ${pack.version.original}, ${pack.deps.asJson}, ${pack.shasum}, ${pack.integrity})"
+    s.update
+      .withUniqueGeneratedKeys[PackageSqlFormat]("name", "version", "deps", "id", "shasum", "integrity")
+      .transact(transactor)
+      .map(_.to)
+  }
+
   def insert(packs: List[LibraryPackage]): F[Unit] = {
+
     val s =
       "insert into package (name, version, deps, id, shasum, integrity) values (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
     Update[(String, String, Json, Int, String, Option[String])](s)

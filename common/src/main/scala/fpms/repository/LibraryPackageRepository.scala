@@ -1,10 +1,13 @@
 package fpms.repository
 
 import fpms.LibraryPackage
+import fpms.LibraryPackageWithOutId
 
 trait LibraryPackageRepository[F[_]] {
 
   def insert(pack: LibraryPackage): F[Unit]
+
+  def insert(pack: LibraryPackageWithOutId): F[LibraryPackage]
 
   def insert(packs: List[LibraryPackage]): F[Unit]
 

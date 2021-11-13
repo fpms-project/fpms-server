@@ -13,6 +13,7 @@ import org.http4s.implicits.*
 import cats.effect.implicits.*
 
 import fpms.LibraryPackage
+import fpms.LibraryPackageWithOutId
 import fpms.repository.AddedPackageIdQueue
 import fpms.repository.LibraryPackageRepository
 import fpms.repository.RDSRepository
@@ -20,7 +21,7 @@ import org.http4s.Response
 import org.http4s.Status
 import cats.effect.kernel.Async
 
-class ServerApp[F[_] : Async] (
+class ServerApp[F[_]: Async](
     packageRepo: LibraryPackageRepository[F],
     rdsRepository: RDSRepository[F],
     addedQueue: AddedPackageIdQueue[F]
@@ -64,13 +65,14 @@ class ServerApp[F[_] : Async] (
     } yield res).value
   }
 
-  def add(pack: LibraryPackage) =
+  def add(pack: LibraryPackageWithOutId) =
     for {
       defined <- packageRepo.findOne(pack.name, pack.version.original).map(_.isDefined)
       _ <- if (defined) Async[F].raiseError(new Throwable("added package is already exists")) else Async[F].pure(())
-      id <- packageRepo.getMaxId().map(_ + 1)
-      _ <- packageRepo.insert(LibraryPackage(pack.name, pack.version, pack.deps, id, pack.shasum, pack.integrity))
-      _ <- addedQueue.push(id)
+      p <- packageRepo.insert(
+        LibraryPackageWithOutId(pack.name, pack.version, pack.deps, pack.shasum, pack.integrity)
+      )
+      _ <- addedQueue.push(p.id)
     } yield ()
 
   private def getLatestRange(name: String) =
@@ -88,9 +90,10 @@ class ServerApp[F[_] : Async] (
 
   def app(): HttpApp[F] = {
     import dsl.*
-    implicit val libraryEncoder = LibraryPackage.encoder
+    import LibraryPackage.*
+    import LibraryPackageWithOutId.*
+
     import org.http4s.circe.CirceEntityEncoder.*
-    implicit val libraryDecoder = LibraryPackage.decoder
     import org.http4s.circe.CirceEntityDecoder.*
 
     HttpRoutes
@@ -125,7 +128,7 @@ class ServerApp[F[_] : Async] (
 
         case req @ POST -> Root / "add" =>
           for {
-            v <- req.as[LibraryPackage]
+            v <- req.as[LibraryPackageWithOutId]
             x <- Ok(add(v))
           } yield x
       }

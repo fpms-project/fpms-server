@@ -166,7 +166,7 @@ returns the calculated `$name` package.
 
 - `range`: version range, see also [semver.npmjs.com](https://semver.npmjs.com/)
 
-### response example
+### response example of `http://fpms-server.cs.ise.shibaura-it.ac.jp/calculated/react?range=17.0.1`
 
 ```json
 {

@@ -58,7 +58,6 @@ class LDILRedisRepository[F[_]: Async](conf: RedisConfig)(implicit P: Parallel[F
   def insert(map: LDILMap): F[Unit] = resource.use(_insert(map))
 
   private def _insert(map: LDILMap)(cmd: RedisCommands[F, String, String]) = {
-    val grouped = map.grouped(map.size / 16).zipWithIndex
     val savefunc = (miniMap: LDILMap) => {
       miniMap
         .grouped(100)
@@ -69,13 +68,10 @@ class LDILRedisRepository[F[_]: Async](conf: RedisConfig)(implicit P: Parallel[F
         .toList
         .sequence_
     }
+    val grouped = map.grouped(map.size / 16).zipWithIndex
     grouped.map {
       case (miniMap, i) => {
-        Async[F].async_[Unit](cb => {
-          savefunc(miniMap)
-          logger.info(s"end insert $i")
-          cb(Right(()))
-        })
+        savefunc(miniMap).map(v => logger.info(s"end insert $i"))
       }
     }.toList.parSequence_
   }

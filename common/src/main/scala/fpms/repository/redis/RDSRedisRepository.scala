@@ -28,17 +28,16 @@ class RDSRedisRepository[F[_]: Async](conf: RedisConfig)(implicit P: Parallel[F]
   private def _insert(map: RDS.RDSMap)(cmd: RedisCommands[F, String, String]): F[Unit] = {
     val indexed = map.grouped(map.size / 16).zipWithIndex
     val insertFunc = (miniMap: Map[Int, Array[Int]]) => {
-      miniMap.grouped(100).map { v => 
-        cmd.mSet(v.map { case (i, v) => (key(i), v.mkString(",")) })
-      }.toList.sequence_
+      miniMap
+        .grouped(100)
+        .map { v =>
+          cmd.mSet(v.map { case (i, v) => (key(i), v.mkString(",")) })
+        }
+        .toList
+        .sequence_
     }
-    indexed.map {
-      case (m, i) =>
-        Async[F].async_[Unit](cb => {
-          insertFunc(m)
-          logger.info(s"end $i")
-          cb(Right(()))
-        })
+    indexed.map { case (m, i) =>
+      insertFunc(m).map(v => logger.info(s"end insert $i"))
     }.toList.parSequence_
   }
 
